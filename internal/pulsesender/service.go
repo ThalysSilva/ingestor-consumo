@@ -7,19 +7,10 @@ import (
 	"github.com/google/uuid"
 	"math/rand"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
 )
 
-type PulseSender struct {
-	quitChan    chan struct{}
-	wg          sync.WaitGroup
-	minDelay    int
-	maxDelay    int
-	qtyTenants  int
-	ingestorURL string
-}
 
 var qtyPulsesSent int64
 

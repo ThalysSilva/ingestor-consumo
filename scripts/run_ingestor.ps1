@@ -11,4 +11,4 @@ Get-Content .env | ForEach-Object {
         [System.Environment]::SetEnvironmentVariable($name, $value)
     }
 }
-go run cmd/pulse_ingestor/main.go
+go run cmd/ingestor/main.go

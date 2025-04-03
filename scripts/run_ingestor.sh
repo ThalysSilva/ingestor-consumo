@@ -16,4 +16,4 @@ while IFS='=' read -r key value; do
     export "$key=$value"
 done < <(grep -v '^\s*#' .env | grep -v '^\s*$')
 set +a
-go run cmd/pulse_ingestor/main.go
+go run cmd/ingestor/main.go

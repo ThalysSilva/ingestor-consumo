@@ -1,23 +1,23 @@
-package entities
+package pulse
 
 import "fmt"
 
 type PulseUnit string
 
 const (
-	PulseUnitKB     PulseUnit = "KB"
-	PulseUnitMB     PulseUnit = "MB"
-	PulseUnitGB     PulseUnit = "GB"
-	PulseUnitKBxSec PulseUnit = "KB/sec"
-	PulseUnitMBxSec PulseUnit = "MB/sec"
-	PulseUnitGBxSec PulseUnit = "GB/sec"
+	KB     PulseUnit = "KB"
+	MB     PulseUnit = "MB"
+	GB     PulseUnit = "GB"
+	KBxSec PulseUnit = "KB/sec"
+	MBxSec PulseUnit = "MB/sec"
+	GBxSec PulseUnit = "GB/sec"
 )
 
 // Valida se a unidade informada é válida
 func (p PulseUnit) IsValid() bool {
 	validUnits := map[PulseUnit]bool{
-		PulseUnitKB: true, PulseUnitMB: true, PulseUnitGB: true,
-		PulseUnitKBxSec: true, PulseUnitMBxSec: true, PulseUnitGBxSec: true,
+		KB: true, MB: true, GB: true,
+		KBxSec: true, MBxSec: true, GBxSec: true,
 	}
 	return validUnits[p]
 }

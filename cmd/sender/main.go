@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/ThalysSilva/ingestor-consumo/internal/services/pulsesender"
+	"github.com/ThalysSilva/ingestor-consumo/internal/pulsesender"
 )
 
 var (
