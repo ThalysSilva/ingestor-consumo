@@ -98,7 +98,7 @@ func storePulseInRedis(ctx context.Context, client *redis.Client, pulse entities
 		return err
 	}
 	redisAccessCount.Inc()
-	return client.Set(ctx, "pulso:"+pulse.TenantId, data, 10*time.Minute).Err()
+	return client.Set(ctx, "tenantId:"+pulse.TenantId, data, 10*time.Minute).Err()
 }
 
 func RandomPulseUnit() entities.PulseUnit {
