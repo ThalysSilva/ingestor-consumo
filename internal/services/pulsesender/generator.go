@@ -1,4 +1,4 @@
-package sender
+package pulsesender
 
 import (
 	"fmt"

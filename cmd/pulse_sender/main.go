@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"time"
-	"github.com/ThalysSilva/ingestor-consumo/internal/services/sender"
+	"github.com/ThalysSilva/ingestor-consumo/internal/services/pulsesender"
 )
 
 const (
@@ -15,7 +15,7 @@ const (
 )
 
 func main() {
-	sender := sender.NewPulseSender(ingestorURL, minDelay, maxDelay, qtyTenants)
+	sender := pulsesender.NewPulseSender(ingestorURL, minDelay, maxDelay, qtyTenants)
 	fmt.Println("Iniciando o Envio de pulsos...")
 
 	sender.Start()
