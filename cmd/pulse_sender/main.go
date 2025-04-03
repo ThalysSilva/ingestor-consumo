@@ -2,19 +2,25 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
+
 	"github.com/ThalysSilva/ingestor-consumo/internal/services/pulsesender"
 )
 
+var (
+	INGESTOR_PORT = os.Getenv("INGESTOR_PORT")
+)
+
 const (
-	ingestorURL  = "http://localhost:8080/ingest"
 	minDelay     = 500
 	maxDelay     = 2000
 	timeDuration = 10 * time.Second
-	qtyTenants   = 10
+	qtyTenants   = 1000
 )
 
 func main() {
+	ingestorURL := fmt.Sprintf("http://localhost:%s/ingest", INGESTOR_PORT)
 	sender := pulsesender.NewPulseSender(ingestorURL, minDelay, maxDelay, qtyTenants)
 	fmt.Println("Iniciando o Envio de pulsos...")
 
