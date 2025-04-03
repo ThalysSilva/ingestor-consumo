@@ -5,7 +5,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func HandleIngestor(pulseService PulseService) gin.HandlerFunc {
+type pulseHandler struct {
+	pulseService PulseService
+}
+type PulseHandler interface {
+	Ingestor() gin.HandlerFunc
+}
+
+func NewPulseHandler(pulseService PulseService) PulseHandler {
+	return &pulseHandler{
+		pulseService: pulseService,
+	}
+}
+
+func (p *pulseHandler) Ingestor() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var pulso Pulse
 		if err := c.ShouldBindJSON(&pulso); err != nil {
@@ -14,7 +27,7 @@ func HandleIngestor(pulseService PulseService) gin.HandlerFunc {
 			return
 		}
 
-		pulseService.EnqueuePulse(pulso)
+		p.pulseService.EnqueuePulse(pulso)
 		fmt.Printf("Recebido pulso: %v\n", pulso)
 		c.JSON(201, nil)
 	}
