@@ -10,6 +10,7 @@ import (
 
 	"github.com/ThalysSilva/ingestor-consumo/internal/entities"
 	"github.com/go-redis/redis/v8"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type pulseService struct {
@@ -24,7 +25,31 @@ type PulseService interface {
 	StorePulseInRedis(ctx context.Context, client *redis.Client, pulso entities.Pulse) error
 }
 
+var (
+	pulsesReceived = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "ingestor_pulses_received_total",
+			Help: "Total de pulsos recebidos pelo ingestor",
+		},
+	)
+	pulseProcessingTime = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "ingestor_pulse_processing_duration_seconds",
+			Help:    "Duração do processamento dos pulsos",
+			Buckets: prometheus.DefBuckets,
+		},
+	)
+	redisAccessCount = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "ingestor_redis_access_total",
+			Help: "Número total de acessos ao Redis",
+		},
+	)
+)
 
+func init() {
+	prometheus.MustRegister(pulsesReceived, pulseProcessingTime, redisAccessCount)
+}
 
 func NewPulseService(ctx context.Context) *pulseService {
 	return &pulseService{
@@ -34,14 +59,14 @@ func NewPulseService(ctx context.Context) *pulseService {
 
 func (s *pulseService) ProcessPulsos() {
 	for pulso := range s.pulsoChannel {
-
+		start := time.Now()
 		if err := storePulseInRedis(s.ctx, s.redisClient, pulso); err != nil {
 			fmt.Printf("Erro ao armazenar pulso no Redis: %v\n", err)
 		} else {
 			fmt.Printf("Pulso armazenado com sucesso: %s\n", pulso.TenantId)
-
+			pulsesReceived.Inc()
 		}
-
+		pulseProcessingTime.Observe(time.Since(start).Seconds())
 	}
 	s.wg.Done()
 }
@@ -56,6 +81,6 @@ func storePulseInRedis(ctx context.Context, client *redis.Client, pulse entities
 	if err != nil {
 		return err
 	}
-
+	redisAccessCount.Inc()
 	return client.Set(ctx, "pulso:"+pulse.TenantId, data, 10*time.Minute).Err()
 }
