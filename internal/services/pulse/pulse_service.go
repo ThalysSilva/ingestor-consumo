@@ -21,8 +21,9 @@ type pulseService struct {
 }
 
 type PulseService interface {
-	ProcessPulses()
-	StorePulseInRedis(ctx context.Context, client *redis.Client, pulso entities.Pulse) error
+	EnqueuePulse(pulso entities.Pulse)
+	Start(workers int)
+	Stop()
 }
 
 var (
@@ -51,13 +52,33 @@ func init() {
 	prometheus.MustRegister(pulsesReceived, pulseProcessingTime, redisAccessCount)
 }
 
-func NewPulseService(ctx context.Context) *pulseService {
+func NewPulseService(ctx context.Context, redisClient *redis.Client) PulseService {
 	return &pulseService{
 		pulsoChannel: make(chan entities.Pulse, 100),
+		redisClient:  redisClient,
+		ctx:          ctx,
 	}
 }
 
-func (s *pulseService) ProcessPulsos() {
+func (s *pulseService) Start(workers int) {
+	for range workers {
+		s.wg.Add(1)
+		go s.processPulses()
+	}
+}
+
+func (s *pulseService) Stop() {
+	close(s.pulsoChannel)
+	s.wg.Wait()
+	fmt.Println("Todos os workers foram finalizados.")
+}
+
+func (s *pulseService) EnqueuePulse(pulse entities.Pulse) {
+	s.pulsoChannel <- pulse
+}
+
+func (s *pulseService) processPulses() {
+	defer s.wg.Done()
 	for pulso := range s.pulsoChannel {
 		start := time.Now()
 		if err := storePulseInRedis(s.ctx, s.redisClient, pulso); err != nil {
@@ -68,12 +89,7 @@ func (s *pulseService) ProcessPulsos() {
 		}
 		pulseProcessingTime.Observe(time.Since(start).Seconds())
 	}
-	s.wg.Done()
-}
 
-func RandomPulseUnit() entities.PulseUnit {
-	units := []entities.PulseUnit{entities.PulseUnitKB, entities.PulseUnitMB, entities.PulseUnitGB, entities.PulseUnitKBxSec, entities.PulseUnitMBxSec, entities.PulseUnitGBxSec}
-	return units[rand.Intn(len(units))]
 }
 
 func storePulseInRedis(ctx context.Context, client *redis.Client, pulse entities.Pulse) error {
@@ -83,4 +99,9 @@ func storePulseInRedis(ctx context.Context, client *redis.Client, pulse entities
 	}
 	redisAccessCount.Inc()
 	return client.Set(ctx, "pulso:"+pulse.TenantId, data, 10*time.Minute).Err()
+}
+
+func RandomPulseUnit() entities.PulseUnit {
+	units := []entities.PulseUnit{entities.PulseUnitKB, entities.PulseUnitMB, entities.PulseUnitGB, entities.PulseUnitKBxSec, entities.PulseUnitMBxSec, entities.PulseUnitGBxSec}
+	return units[rand.Intn(len(units))]
 }
