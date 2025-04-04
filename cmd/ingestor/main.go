@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/ThalysSilva/ingestor-consumo/internal/mocks"
 	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -21,8 +23,9 @@ var (
 )
 
 var (
-	ctx         = context.Background()
-	redisClient = redis.NewClient(&redis.Options{Addr: REDIS_HOST + ":" + REDIS_PORT})
+	ctx            = context.Background()
+	mockHTTPClient = mocks.NewHttpClientMock(200, nil, nil)
+	redisClient    = redis.NewClient(&redis.Options{Addr: REDIS_HOST + ":" + REDIS_PORT})
 )
 
 func main() {
@@ -31,10 +34,9 @@ func main() {
 	defer redisClient.Close()
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	pulseService := pulse.NewPulseService(ctx, redisClient, API_URL_SENDER)
+	pulseService := pulse.NewPulseService(ctx, redisClient, API_URL_SENDER, pulse.WithCustomHTTPClient(mockHTTPClient))
 	pulseHandler := pulse.NewPulseHandler(pulseService)
-	pulseService.Start(5, time.Hour)
+	go pulseService.Start(50, time.Minute)
 
 	r := gin.Default()
 	r.POST("/ingest", pulseHandler.Ingestor())
@@ -52,8 +54,8 @@ func main() {
 
 	<-stop
 	fmt.Println("Recebido sinal de parada, finalizando...")
-
-	// Para os workers corretamente
 	pulseService.Stop()
 	fmt.Println("Todos os workers pararam.")
+	cancel()
+
 }
