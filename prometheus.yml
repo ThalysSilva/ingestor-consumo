@@ -2,6 +2,6 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'go_app'
+  - job_name: 'ingestor-consumo'
     static_configs:
       - targets: ['host.docker.internal:8080']
