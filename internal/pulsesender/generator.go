@@ -6,8 +6,10 @@ import (
 	"math/rand"
 )
 
-func GenerateRandomPulse(tenantId string, useUnit pulse.PulseUnit) (*pulse.Pulse, error) {
-	productSku := fmt.Sprintf("SKU-%d", rand.Intn(100))
+func (pss *pulseSenderService) randomPulse(tenantId string) (*pulse.Pulse, error) {
+	skuSelector := rand.Intn(len(*pss.skuMap))
+	productSku := fmt.Sprintf("SKU-%d", skuSelector)
+	useUnit := (*pss.skuMap)[productSku]
 	usedAmount := float64(rand.Intn(1000)) + rand.Float64()
 	pulse, err := pulse.NewPulse(tenantId, productSku, usedAmount, useUnit)
 	if err != nil {
@@ -16,4 +18,9 @@ func GenerateRandomPulse(tenantId string, useUnit pulse.PulseUnit) (*pulse.Pulse
 	}
 
 	return pulse, nil
+}
+
+func (pss *pulseSenderService) randomPulseUnit() pulse.PulseUnit {
+	units := []pulse.PulseUnit{pulse.KB, pulse.MB, pulse.GB, pulse.KBxSec, pulse.MBxSec, pulse.GBxSec}
+	return units[rand.Intn(len(units))]
 }

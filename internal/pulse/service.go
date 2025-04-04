@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"sync"
@@ -250,7 +249,3 @@ func (s *pulseService) startAggregationLoop(interval time.Duration) {
 	}()
 }
 
-func RandomPulseUnit() PulseUnit {
-	units := []PulseUnit{KB, MB, GB, KBxSec, MBxSec, GBxSec}
-	return units[rand.Intn(len(units))]
-}

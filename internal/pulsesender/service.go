@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
+	"github.com/google/uuid"
 	"math/rand"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
-	"github.com/google/uuid"
 )
 
 type pulseSenderService struct {
@@ -21,6 +20,8 @@ type pulseSenderService struct {
 	maxDelay    int
 	qtyTenants  int
 	ingestorURL string
+	skuMap      *map[string]pulse.PulseUnit
+	qtySKUs     int
 }
 type PulseSenderService interface {
 	Start()
@@ -29,33 +30,36 @@ type PulseSenderService interface {
 
 var qtyPulsesSent int64
 
-func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants int) PulseSenderService {
-	return &pulseSenderService{
+func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants, qtySKUs int) PulseSenderService {
+	psv := pulseSenderService{
 		quitChan:    make(chan struct{}),
 		minDelay:    minDelay,
 		maxDelay:    maxDelay,
 		qtyTenants:  qtyTenants,
 		ingestorURL: ingestorURL,
+		qtySKUs:     qtySKUs,
 	}
+	psv.skuMap = psv.generateSkuMap()
+	return &psv
 }
 
-func (ps *pulseSenderService) Start() {
-	for range ps.qtyTenants {
-		ps.wg.Add(1)
+func (pss *pulseSenderService) Start() {
+	for range pss.qtyTenants {
+		pss.wg.Add(1)
 		go func() {
 			tenantId := uuid.New().String()
-			useUnit := pulse.RandomPulseUnit()
-			defer ps.wg.Done()
+
+			defer pss.wg.Done()
 			pulseCount := 1
 			for {
 				select {
-				case <-ps.quitChan:
+				case <-pss.quitChan:
 					return
 				default:
-					delay := time.Duration(rand.Intn(ps.maxDelay-ps.minDelay)+ps.minDelay) * time.Millisecond
+					delay := time.Duration(rand.Intn(pss.maxDelay-pss.minDelay)+pss.minDelay) * time.Millisecond
 					time.Sleep(delay)
 
-					pulse, err := GenerateRandomPulse(tenantId, useUnit)
+					pulse, err := pss.randomPulse(tenantId)
 					if err != nil {
 						fmt.Printf("Erro ao gerar pulso: %v\n", err)
 						continue
@@ -71,7 +75,7 @@ func (ps *pulseSenderService) Start() {
 						continue
 					}
 
-					resp, err := http.Post(ps.ingestorURL, "application/json", bytes.NewBuffer(jsonData))
+					resp, err := http.Post(pss.ingestorURL, "application/json", bytes.NewBuffer(jsonData))
 					if err != nil {
 						fmt.Printf("Erro ao enviar pulso: %v\n", err)
 						continue
@@ -89,9 +93,20 @@ func (ps *pulseSenderService) Start() {
 	}
 }
 
-func (ps *pulseSenderService) Stop() {
-	close(ps.quitChan)
-	ps.wg.Wait()
+func (pss *pulseSenderService) Stop() {
+	close(pss.quitChan)
+	pss.wg.Wait()
 
 	fmt.Printf("Total de pulsos enviados: %d \n", qtyPulsesSent)
+}
+
+func (pss *pulseSenderService) generateSkuMap() *map[string]pulse.PulseUnit {
+	skuMap := make(map[string]pulse.PulseUnit)
+	for i := range pss.qtySKUs {
+		sku := fmt.Sprintf("SKU-%d", i)
+		unit := pss.randomPulseUnit()
+		skuMap[sku] = unit
+	}
+
+	return &skuMap
 }

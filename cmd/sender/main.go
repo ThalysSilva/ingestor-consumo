@@ -17,11 +17,12 @@ const (
 	maxDelay     = 2000
 	timeDuration = 10 * time.Second
 	qtyTenants   = 1000
+	qtySKUs      = 100
 )
 
 func main() {
 	ingestorURL := fmt.Sprintf("http://localhost:%s/ingest", INGESTOR_PORT)
-	sender := pulsesender.NewPulseSenderService(ingestorURL, minDelay, maxDelay, qtyTenants)
+	sender := pulsesender.NewPulseSenderService(ingestorURL, minDelay, maxDelay, qtyTenants, qtySKUs)
 	fmt.Println("Iniciando o Envio de pulsos...")
 
 	sender.Start()
