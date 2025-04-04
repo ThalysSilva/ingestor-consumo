@@ -14,10 +14,10 @@ var (
 
 const (
 	minDelay     = 500
-	maxDelay     = 2000
-	timeDuration = 10 * time.Second
+	maxDelay     = 1000
+	timeDuration = 100 * time.Second
 	qtyTenants   = 1000
-	qtySKUs      = 100
+	qtySKUs      = 10
 )
 
 func main() {
