@@ -3,19 +3,21 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 var (
-	INGESTOR_PORT = os.Getenv("INGESTOR_PORT")
-	REDIS_PORT    = os.Getenv("REDIS_PORT")
-	REDIS_HOST    = os.Getenv("REDIS_HOST")
+	API_URL_SENDER = os.Getenv("API_URL_SENDER")
+	INGESTOR_PORT  = os.Getenv("INGESTOR_PORT")
+	REDIS_PORT     = os.Getenv("REDIS_PORT")
+	REDIS_HOST     = os.Getenv("REDIS_HOST")
 )
 
 var (
@@ -30,9 +32,9 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	pulseService := pulse.NewPulseService(ctx, redisClient)
+	pulseService := pulse.NewPulseService(ctx, redisClient, API_URL_SENDER)
 	pulseHandler := pulse.NewPulseHandler(pulseService)
-	pulseService.Start(5)
+	pulseService.Start(5, time.Hour)
 
 	r := gin.Default()
 	r.POST("/ingest", pulseHandler.Ingestor())
