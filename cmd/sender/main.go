@@ -21,7 +21,7 @@ const (
 
 func main() {
 	ingestorURL := fmt.Sprintf("http://localhost:%s/ingest", INGESTOR_PORT)
-	sender := pulsesender.NewPulseSender(ingestorURL, minDelay, maxDelay, qtyTenants)
+	sender := pulsesender.NewPulseSenderService(ingestorURL, minDelay, maxDelay, qtyTenants)
 	fmt.Println("Iniciando o Envio de pulsos...")
 
 	sender.Start()

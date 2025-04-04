@@ -4,18 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"math/rand"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
+	"github.com/google/uuid"
 )
 
+type pulseSenderService struct {
+	quitChan    chan struct{}
+	wg          sync.WaitGroup
+	minDelay    int
+	maxDelay    int
+	qtyTenants  int
+	ingestorURL string
+}
+type PulseSenderService interface {
+	Start()
+	Stop()
+}
 
 var qtyPulsesSent int64
 
-func NewPulseSender(ingestorURL string, minDelay, maxDelay, qtyTenants int) *PulseSender {
-	return &PulseSender{
+func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants int) PulseSenderService {
+	return &pulseSenderService{
 		quitChan:    make(chan struct{}),
 		minDelay:    minDelay,
 		maxDelay:    maxDelay,
@@ -24,22 +39,23 @@ func NewPulseSender(ingestorURL string, minDelay, maxDelay, qtyTenants int) *Pul
 	}
 }
 
-func (p *PulseSender) Start() {
-	for range p.qtyTenants {
-		p.wg.Add(1)
+func (ps *pulseSenderService) Start() {
+	for range ps.qtyTenants {
+		ps.wg.Add(1)
 		go func() {
 			tenantId := uuid.New().String()
-			defer p.wg.Done()
+			useUnit := pulse.RandomPulseUnit()
+			defer ps.wg.Done()
 			pulseCount := 1
 			for {
 				select {
-				case <-p.quitChan:
+				case <-ps.quitChan:
 					return
 				default:
-					delay := time.Duration(rand.Intn(p.maxDelay-p.minDelay)+p.minDelay) * time.Millisecond
+					delay := time.Duration(rand.Intn(ps.maxDelay-ps.minDelay)+ps.minDelay) * time.Millisecond
 					time.Sleep(delay)
 
-					pulse, err := GenerateRandomPulse(tenantId)
+					pulse, err := GenerateRandomPulse(tenantId, useUnit)
 					if err != nil {
 						fmt.Printf("Erro ao gerar pulso: %v\n", err)
 						continue
@@ -55,7 +71,7 @@ func (p *PulseSender) Start() {
 						continue
 					}
 
-					resp, err := http.Post(p.ingestorURL, "application/json", bytes.NewBuffer(jsonData))
+					resp, err := http.Post(ps.ingestorURL, "application/json", bytes.NewBuffer(jsonData))
 					if err != nil {
 						fmt.Printf("Erro ao enviar pulso: %v\n", err)
 						continue
@@ -73,9 +89,9 @@ func (p *PulseSender) Start() {
 	}
 }
 
-func (s *PulseSender) Stop() {
-	close(s.quitChan)
-	s.wg.Wait()
+func (ps *pulseSenderService) Stop() {
+	close(ps.quitChan)
+	ps.wg.Wait()
 
 	fmt.Printf("Total de pulsos enviados: %d \n", qtyPulsesSent)
 }
