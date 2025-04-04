@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
-	"github.com/google/uuid"
 	"math/rand"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
+	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
+	"github.com/google/uuid"
 )
 
 type pulseSenderService struct {
@@ -22,6 +24,7 @@ type pulseSenderService struct {
 	ingestorURL string
 	skuMap      *map[string]pulse.PulseUnit
 	qtySKUs     int
+	httpClient  clients.HTTPClient
 }
 type PulseSenderService interface {
 	Start()
@@ -31,6 +34,14 @@ type PulseSenderService interface {
 var qtyPulsesSent int64
 
 func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants, qtySKUs int) PulseSenderService {
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 50,
+			IdleConnTimeout:     30 * time.Second,
+		},
+	}
 	psv := pulseSenderService{
 		quitChan:    make(chan struct{}),
 		minDelay:    minDelay,
@@ -38,7 +49,9 @@ func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants, q
 		qtyTenants:  qtyTenants,
 		ingestorURL: ingestorURL,
 		qtySKUs:     qtySKUs,
+		httpClient:  httpClient,
 	}
+
 	psv.skuMap = psv.generateSkuMap()
 	return &psv
 }
