@@ -2,6 +2,7 @@ package pulse
 
 import (
 	"fmt"
+	"net/http"
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,7 +30,7 @@ func (p *pulseHandler) Ingestor() gin.HandlerFunc {
 
 		p.pulseService.EnqueuePulse(pulso)
 		fmt.Printf("Recebido pulso: %v\n", pulso)
-		c.JSON(201, nil)
+		c.JSON(http.StatusNoContent, nil)
 	}
 
 }
