@@ -29,6 +29,8 @@ type Pulse struct {
 	UseUnit    PulseUnit `json:"use_unit"`
 }
 
+
+
 // Construtor de Pulse
 func NewPulse(tenantId, productSku string, usedAmount float64, useUnit PulseUnit) (*Pulse, error) {
 	if !useUnit.IsValid() {
