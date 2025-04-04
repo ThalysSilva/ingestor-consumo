@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -208,10 +209,19 @@ func (s *pulseService) processAndSendPulses(stabilizationDelay time.Duration) er
 				continue
 			}
 
-			var gen, tenantId, productSku, useUnitStr string
-			_, err = fmt.Sscanf(key, "generation:%s:tenant:%s:sku:%s:useUnit:%s", &gen, &tenantId, &productSku, &useUnitStr)
-			if err != nil {
-				fmt.Printf("Erro ao parsear chave %s: %v\n", key, err)
+			parts := strings.Split(key, ":")
+			if len(parts) != 8 {
+				fmt.Printf("Chave inválida %s: formato esperado generation:<gen>:tenant:<tenantId>:sku:<productSku>:useUnit:<useUnit>\n", key)
+				continue
+			}
+
+			gen := parts[1]
+			tenantId := parts[3]
+			productSku := parts[5]
+			useUnitStr := parts[7]
+
+			if gen == "" || tenantId == "" || productSku == "" || useUnitStr == "" {
+				fmt.Printf("Chave inválida %s: um ou mais campos estão vazios\n", key)
 				continue
 			}
 
