@@ -34,7 +34,7 @@ func main() {
 	defer redisClient.Close()
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	pulseService := pulse.NewPulseService(ctx, redisClient, API_URL_SENDER, pulse.WithCustomHTTPClient(mockHTTPClient))
+	pulseService := pulse.NewPulseService(ctx, redisClient, API_URL_SENDER, 500, pulse.WithCustomHTTPClient(mockHTTPClient))
 	pulseHandler := pulse.NewPulseHandler(pulseService)
 	go pulseService.Start(50, time.Minute)
 

@@ -25,13 +25,14 @@ type PulseService interface {
 }
 
 type pulseService struct {
-	pulseChan    chan Pulse
-	redisClient  clients.RedisClient
-	httpClient   clients.HTTPClient
-	ctx          context.Context
-	wg           sync.WaitGroup
-	generation   atomic.Value
-	apiURLSender string
+	pulseChan      chan Pulse
+	redisClient    clients.RedisClient
+	httpClient     clients.HTTPClient
+	ctx            context.Context
+	wg             sync.WaitGroup
+	generation     atomic.Value
+	apiURLSender   string
+	batchQtyToSend int
 }
 
 type ServiceOptions func(*pulseService)
@@ -53,7 +54,7 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "ingestor_pulse_processing_duration_seconds",
 			Help:    "Duração do processamento dos pulsos",
-			Buckets: prometheus.DefBuckets,
+			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1}, // Buckets para 1ms a 1s
 		},
 	)
 	redisAccessCount = prometheus.NewCounter(
@@ -62,22 +63,22 @@ var (
 			Help: "Número total de acessos ao Redis",
 		},
 	)
-	pulsesFailed = prometheus.NewCounter(
+	pulsesBatchParsedFailed = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "ingestor_pulses_failed_total",
-			Help: "Total de pulsos que falharam no envio para a API",
+			Name: "ingestor_pulses_batch_parse_failed_total",
+			Help: "Total de pulsos que falharam ao serem serializados para envio à API",
 		},
 	)
 	pulsesSentFailed = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "ingestor_pulses_sent_failed_total",
-			Help: "Total de envio de pulsos falhados",
+			Help: "Total de pulsos que falharam ao serem enviados para a API",
 		},
 	)
 	pulsesSentSuccess = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "ingestor_pulses_sent_success_total",
-			Help: "Total de envio de pulsos com sucesso",
+			Help: "Total de pulsos enviados com sucesso para a API",
 		},
 	)
 	pulsesNotDeleted = prometheus.NewCounter(
@@ -90,25 +91,30 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "ingestor_aggregation_cycle_duration_seconds",
 			Help:    "Duração do ciclo de agregação e envio",
-			Buckets: prometheus.DefBuckets,
+			Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10}, // Buckets para 100ms a 10s
 		},
 	)
 )
 
 func init() {
-	prometheus.MustRegister(pulsesReceived, pulseProcessingTime, redisAccessCount, pulsesFailed, aggregationCycleTime, pulsesSentFailed, pulsesSentSuccess, pulsesNotDeleted)
+	prometheus.MustRegister(pulsesReceived, pulseProcessingTime, redisAccessCount, pulsesBatchParsedFailed, aggregationCycleTime, pulsesSentFailed, pulsesSentSuccess, pulsesNotDeleted)
 }
 
-func NewPulseService(ctx context.Context, redisClient clients.RedisClient, apiURLSender string, opts ...ServiceOptions) PulseService {
+func NewPulseService(ctx context.Context, redisClient clients.RedisClient, apiURLSender string, batchQtyToSend int, opts ...ServiceOptions) PulseService {
+	if batchQtyToSend <= 0 {
+		panic(fmt.Sprintf("batchQtyToSend deve ser maior que 0, recebido: %d", batchQtyToSend))
+	}
+
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	psv := &pulseService{
-		pulseChan:    make(chan Pulse, 10000),
-		redisClient:  redisClient,
-		httpClient:   httpClient,
-		ctx:          ctx,
-		apiURLSender: apiURLSender,
+		pulseChan:      make(chan Pulse, 100),
+		redisClient:    redisClient,
+		httpClient:     httpClient,
+		ctx:            ctx,
+		apiURLSender:   apiURLSender,
+		batchQtyToSend: batchQtyToSend,
 	}
 	currentGeneration, err := psv.getCurrentGeneration()
 	if err != nil {
@@ -151,8 +157,12 @@ func (s *pulseService) processPulses() {
 		} else {
 			fmt.Printf("Pulso armazenado com sucesso: %s\n", pulse.TenantId)
 			pulsesReceived.Inc()
+			fmt.Printf("Métrica pulsesReceived incrementada: %v\n", pulsesReceived)
 		}
-		pulseProcessingTime.Observe(time.Since(start).Seconds())
+		duration := time.Since(start).Seconds()
+		fmt.Printf("Duração do processamento do pulso: %f segundos\n", duration)
+		pulseProcessingTime.Observe(duration)
+		fmt.Printf("Métrica pulseProcessingTime observada: %f\n", duration)
 	}
 }
 
@@ -161,19 +171,24 @@ func (s *pulseService) storePulseInRedis(ctx context.Context, client clients.Red
 		gen := s.generation.Load().(string)
 		key := fmt.Sprintf("generation:%s:tenant:%s:sku:%s:useUnit:%s", gen, pulse.TenantId, pulse.ProductSku, pulse.UseUnit)
 
+		redisAccessCount.Inc()
+		fmt.Printf("Métrica redisAccessCount incrementada: %v\n", redisAccessCount)
+
 		if err := client.IncrByFloat(ctx, key, pulse.UsedAmount).Err(); err != nil {
 			return fmt.Errorf("erro ao incrementar valor no Redis: %v", err)
 		}
 
-		redisAccessCount.Inc()
 		return nil
 	}, 3)
 }
 
-func (s *pulseService) processAndSendPulses(stabilizationDelay time.Duration) error {
+func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 	start := time.Now()
 	defer func() {
-		aggregationCycleTime.Observe(time.Since(start).Seconds())
+		duration := time.Since(start).Seconds()
+		fmt.Printf("Duração do ciclo de agregação e envio: %f segundos\n", duration)
+		aggregationCycleTime.Observe(duration)
+		fmt.Printf("Métrica aggregationCycleTime observada: %f\n", duration)
 	}()
 
 	currentGen := s.generation.Load().(string)
@@ -186,7 +201,6 @@ func (s *pulseService) processAndSendPulses(stabilizationDelay time.Duration) er
 		return fmt.Errorf("erro ao alternar geração: %v", err)
 	}
 
-	// Aguardar para não dar conflito com o worker que está processando os pulsos
 	time.Sleep(stabilizationDelay)
 
 	for {
@@ -235,7 +249,7 @@ func (s *pulseService) processAndSendPulses(stabilizationDelay time.Duration) er
 			aggregatedPulses[key] = pulse
 		}
 
-		if cursor == 0 { // entender melhor
+		if cursor == 0 {
 			break
 		}
 	}
@@ -245,44 +259,83 @@ func (s *pulseService) processAndSendPulses(stabilizationDelay time.Duration) er
 		return nil
 	}
 
-	pulses := make([]Pulse, 0, len(aggregatedPulses))
-	for _, value := range aggregatedPulses {
-		pulses = append(pulses, value)
+	pulsesBatch := utils.ChunkMapValues(aggregatedPulses, s.batchQtyToSend)
+
+	const maxWorkers = 5
+	semaphore := make(chan struct{}, maxWorkers)
+	errChan := make(chan error, len(pulsesBatch))
+	var wg sync.WaitGroup
+
+	for batchIndex, pulses := range pulsesBatch {
+		wg.Add(1)
+		semaphore <- struct{}{}
+		go func(batchIndex int, pulses []Pulse) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			pulsesData, err := json.Marshal(pulses)
+			if err != nil {
+				fmt.Printf("Erro ao serializar lote %d da geração %s: %v\n", batchIndex, currentGen, err)
+				pulsesBatchParsedFailed.Add(float64(len(pulses)))
+				fmt.Printf("Métrica pulsesBatchParsedFailed incrementada: %v\n", pulsesBatchParsedFailed)
+				errChan <- fmt.Errorf("lote %d: erro ao serializar pulsos: %v", batchIndex, err)
+				return
+			}
+
+			resp, err := s.httpClient.Post(s.apiURLSender, "application/json", bytes.NewBuffer(pulsesData))
+			if err != nil {
+				fmt.Printf("Erro ao enviar lote %d da geração %s para a API: %v\n", batchIndex, currentGen, err)
+				pulsesSentFailed.Add(float64(len(pulses)))
+				fmt.Printf("Métrica pulsesSentFailed incrementada: %v\n", pulsesSentFailed)
+				errChan <- fmt.Errorf("lote %d: erro ao enviar pulsos: %v", batchIndex, err)
+				return
+			}
+			defer func() {
+				if resp != nil {
+					resp.Body.Close()
+				}
+			}()
+
+			if resp.StatusCode != http.StatusOK {
+				fmt.Printf("Erro na resposta da API para o lote %d da geração %s: status %d\n", batchIndex, currentGen, resp.StatusCode)
+				pulsesSentFailed.Add(float64(len(pulses)))
+				fmt.Printf("Métrica pulsesSentFailed incrementada: %v\n", pulsesSentFailed)
+				errChan <- fmt.Errorf("lote %d: erro na resposta da API: status %d", batchIndex, resp.StatusCode)
+				return
+			}
+
+			for _, pulse := range pulses {
+				key := fmt.Sprintf("generation:%s:tenant:%s:sku:%s:useUnit:%s", currentGen, pulse.TenantId, pulse.ProductSku, pulse.UseUnit)
+				if err := s.redisClient.Del(s.ctx, key).Err(); err != nil {
+					fmt.Printf("Erro ao apagar chave %s: %v\n", key, err)
+					pulsesNotDeleted.Inc()
+					fmt.Printf("Métrica pulsesNotDeleted incrementada: %v\n", pulsesNotDeleted)
+					errChan <- fmt.Errorf("lote %d: erro ao apagar chave %s: %v", batchIndex, key, err)
+					return
+				}
+			}
+
+			pulsesSentSuccess.Add(float64(len(pulses)))
+			fmt.Printf("Métrica pulsesSentSuccess incrementada: %v\n", pulsesSentSuccess)
+			fmt.Printf("Lote %d da geração %s enviado e removido com sucesso! (%d pulsos)\n", batchIndex, currentGen, len(pulses))
+		}(batchIndex, pulses)
 	}
 
-	pulsesData, err := json.Marshal(pulses)
-	if err != nil {
-		fmt.Printf("Erro ao serializar pulsos: %v\n", err)
-		pulsesSentFailed.Inc()
-		pulsesFailed.Inc()
-		return err
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
 	}
 
-	resp, err := s.httpClient.Post(s.apiURLSender, "application/json", bytes.NewBuffer(pulsesData))
-	if err != nil {
-		fmt.Printf("Erro ao enviar pulsos da geração \"%s\" para a API: %v\n", currentGen, err)
-		pulsesSentFailed.Inc()
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Erro na resposta da API para os pulsos da geração \"%s\". status %d\n", currentGen, resp.StatusCode)
-		pulsesSentFailed.Inc()
-		return err
+	if len(errors) > 0 {
+		return fmt.Errorf("falhas ao enviar pulsos: %v", errors)
 	}
 
-	for key := range aggregatedPulses {
-		if err := s.redisClient.Del(s.ctx, key).Err(); err != nil {
-			err = fmt.Errorf("erro ao apagar chave %s: %v", key, err)
-			// pulsesNotDeleted.Inc()
-			panic(err) // melhorar essa tratativa
-		}
-	}
-
-	pulsesSentSuccess.Inc()
-	fmt.Printf("Pulsos da geração \"%s\" enviados e removidos com sucesso!", currentGen)
-
+	fmt.Printf("Pulsos da geração %s enviados e removidos com sucesso!\n", currentGen)
 	return nil
 }
 
@@ -319,7 +372,7 @@ func (s *pulseService) startAggregationLoop(interval time.Duration, stabilizatio
 	go func() {
 		for range ticker.C {
 			fmt.Println("Processando e enviando pulsos agregados...")
-			if err := s.processAndSendPulses(stabilizationDelay); err != nil {
+			if err := s.sendPulses(stabilizationDelay); err != nil {
 				fmt.Printf("Erro ao processar e enviar pulsos: %v\n", err)
 			} else {
 				fmt.Println("Pulsos processados e enviados com sucesso.")
