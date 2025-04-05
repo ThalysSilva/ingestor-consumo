@@ -56,23 +56,23 @@ func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants, q
 	return &psv
 }
 
-func (pss *pulseSenderService) Start() {
-	for range pss.qtyTenants {
-		pss.wg.Add(1)
+func (s *pulseSenderService) Start() {
+	for range s.qtyTenants {
+		s.wg.Add(1)
 		go func() {
 			tenantId := uuid.New().String()
 
-			defer pss.wg.Done()
+			defer s.wg.Done()
 			pulseCount := 1
 			for {
 				select {
-				case <-pss.quitChan:
+				case <-s.quitChan:
 					return
 				default:
-					delay := time.Duration(rand.Intn(pss.maxDelay-pss.minDelay)+pss.minDelay) * time.Millisecond
+					delay := time.Duration(rand.Intn(s.maxDelay-s.minDelay)+s.minDelay) * time.Millisecond
 					time.Sleep(delay)
 
-					pulse, err := pss.randomPulse(tenantId)
+					pulse, err := s.randomPulse(tenantId)
 					if err != nil {
 						fmt.Printf("Erro ao gerar pulso: %v\n", err)
 						continue
@@ -88,7 +88,7 @@ func (pss *pulseSenderService) Start() {
 						continue
 					}
 
-					resp, err := http.Post(pss.ingestorURL, "application/json", bytes.NewBuffer(jsonData))
+					resp, err := s.httpClient.Post(s.ingestorURL, "application/json", bytes.NewBuffer(jsonData))
 					if err != nil {
 						fmt.Printf("Erro ao enviar pulso: %v\n", err)
 						continue
