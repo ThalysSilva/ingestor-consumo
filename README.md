@@ -59,7 +59,7 @@ O sistema suporta 2000 req/s e foi projetado para ser escalável em produção. 
 Clone o repositório:
 
 ```bash
-git clone <URL_DO_REPOSITORIO>
+git clone git@github.com:ThalysSilva/ingestor-consumo.git
 cd ingestor-consumo
 ```
 
