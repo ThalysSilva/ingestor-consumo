@@ -220,7 +220,6 @@ Em um ambiente de produção, a arquitetura seria ajustada para maior escalabili
 - **Load Balancer:** Um load balancer seria adicionado para distribuir requisições entre múltiplas instâncias do Ingestor.
 - **Redis Central:** Um Redis central com coordenação (ex.: lock distribuído) poderia ser usado para simplificar a operação e facilitar a agregação global.
 - **Microserviço de Disparo:** A Etapa 3 (disparo e deleção) seria delegada a um microserviço independente (ex.: PulseSender), permitindo desacoplamento e escalabilidade independente.
-- **Kafka:** Se o volume de pulsos aumentar significativamente (ex.: milhões por segundo), o Kafka poderia ser usado para escalabilidade e persistência distribuída.
 
 ## Licença
 
