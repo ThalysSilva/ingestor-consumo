@@ -188,7 +188,7 @@ O pulseProducer enviará pulsos para `http://localhost:8070/ingest` por 100 segu
 Você também pode enviar pulsos manualmente via curl:
 
 ```bash
-curl -X POST http://localhost:8070/ingest -H "Content-Type: application/json" -d '{"tenant_id":"tenant_xpto","product_sku":"vm_123","used_amount":307,"use_unity":"KB"}'
+curl -X POST http://localhost:8070/ingest -H "Content-Type: application/json" -d '{"tenant_id":"tenant_xpto","product_sku":"SKU-77","used_amount":307,"use_unity":"KB"}'
 ```
 
 ## Verificação
