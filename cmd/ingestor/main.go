@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
 	"github.com/ThalysSilva/ingestor-consumo/internal/mocks"
 	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -25,13 +26,13 @@ var (
 var (
 	ctx            = context.Background()
 	mockHTTPClient = mocks.NewHttpClientMock(200, nil, nil)
-	redisClient    = redis.NewClient(&redis.Options{Addr: REDIS_HOST + ":" + REDIS_PORT})
 )
 
 func main() {
+	redisClient := clients.InitRedisClient(REDIS_HOST, REDIS_PORT)
+	defer redisClient.Close()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	defer redisClient.Close()
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	pulseService := pulse.NewPulseService(ctx, redisClient, API_URL_SENDER, 500, pulse.WithCustomHTTPClient(mockHTTPClient))
@@ -52,10 +53,10 @@ func main() {
 		}
 	}()
 
-	<-stop
-	fmt.Println("Recebido sinal de parada, finalizando...")
-	pulseService.Stop()
-	fmt.Println("Todos os workers pararam.")
-	cancel()
+		<-stop
+	   	fmt.Println("Recebido sinal de parada, finalizando...")
+	   	pulseService.Stop()
+	   	fmt.Println("Todos os workers pararam.")
+	   	cancel()
 
 }
