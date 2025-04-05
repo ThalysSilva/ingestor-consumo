@@ -4,4 +4,4 @@ global:
 scrape_configs:
   - job_name: 'pulse-ingestor'
     static_configs:
-      - targets: ['pulse-ingestor:8070']
+      - targets: ['host.docker.internal:8070']
