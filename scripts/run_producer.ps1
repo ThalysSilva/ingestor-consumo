@@ -11,4 +11,4 @@ Get-Content .env | ForEach-Object {
         [System.Environment]::SetEnvironmentVariable($name, $value)
     }
 }
-go run cmd/sender/main.go
+go run cmd/producer/main.go

@@ -16,4 +16,4 @@ while IFS='=' read -r key value; do
     export "$key=$value"
 done < <(grep -v '^\s*#' .env | grep -v '^\s*$')
 set +a
-go run cmd/sender/main.go
+go run cmd/producer/main.go

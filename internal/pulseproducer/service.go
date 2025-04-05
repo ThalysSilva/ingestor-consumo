@@ -1,4 +1,4 @@
-package pulsesender
+package pulseproducer
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type pulseSenderService struct {
+type pulseProducerService struct {
 	quitChan    chan struct{}
 	wg          sync.WaitGroup
 	minDelay    int
@@ -27,14 +27,14 @@ type pulseSenderService struct {
 	qtySKUs     int
 	httpClient  clients.HTTPClient
 }
-type PulseSenderService interface {
+type PulseProducerService interface {
 	Start()
 	Stop()
 }
 
 var qtyPulsesSent int64
 
-func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants, qtySKUs int) PulseSenderService {
+func NewPulseProducerService(ingestorURL string, minDelay, maxDelay, qtyTenants, qtySKUs int) PulseProducerService {
 	httpClient := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
@@ -43,7 +43,7 @@ func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants, q
 			IdleConnTimeout:     30 * time.Second,
 		},
 	}
-	psv := pulseSenderService{
+	psv := pulseProducerService{
 		quitChan:    make(chan struct{}),
 		minDelay:    minDelay,
 		maxDelay:    maxDelay,
@@ -57,7 +57,7 @@ func NewPulseSenderService(ingestorURL string, minDelay, maxDelay, qtyTenants, q
 	return &psv
 }
 
-func (s *pulseSenderService) Start() {
+func (s *pulseProducerService) Start() {
 	for range s.qtyTenants {
 		s.wg.Add(1)
 		go func() {
@@ -106,17 +106,17 @@ func (s *pulseSenderService) Start() {
 	}
 }
 
-func (pss *pulseSenderService) Stop() {
-	close(pss.quitChan)
-	pss.wg.Wait()
+func (s *pulseProducerService) Stop() {
+	close(s.quitChan)
+	s.wg.Wait()
 	log.Info().Msgf("Total de pulsos enviados: %d \n", qtyPulsesSent)
 }
 
-func (pss *pulseSenderService) generateSkuMap() *map[string]pulse.PulseUnit {
+func (s *pulseProducerService) generateSkuMap() *map[string]pulse.PulseUnit {
 	skuMap := make(map[string]pulse.PulseUnit)
-	for i := range pss.qtySKUs {
+	for i := range s.qtySKUs {
 		sku := fmt.Sprintf("SKU-%d", i)
-		unit := pss.randomPulseUnit()
+		unit := s.randomPulseUnit()
 		skuMap[sku] = unit
 	}
 

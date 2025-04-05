@@ -1,4 +1,4 @@
-package pulsesender
+package pulseproducer
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func (pss *pulseSenderService) randomPulse(tenantId string) (*pulse.Pulse, error) {
+func (pss *pulseProducerService) randomPulse(tenantId string) (*pulse.Pulse, error) {
 	skuSelector := rand.Intn(len(*pss.skuMap))
 	productSku := fmt.Sprintf("SKU-%d", skuSelector)
 	useUnit := (*pss.skuMap)[productSku]
@@ -22,7 +22,7 @@ func (pss *pulseSenderService) randomPulse(tenantId string) (*pulse.Pulse, error
 	return pulse, nil
 }
 
-func (pss *pulseSenderService) randomPulseUnit() pulse.PulseUnit {
+func (pss *pulseProducerService) randomPulseUnit() pulse.PulseUnit {
 	units := []pulse.PulseUnit{pulse.KB, pulse.MB, pulse.GB, pulse.KBxSec, pulse.MBxSec, pulse.GBxSec}
 	return units[rand.Intn(len(units))]
 }

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
-	"github.com/ThalysSilva/ingestor-consumo/internal/pulsesender"
+	"github.com/ThalysSilva/ingestor-consumo/internal/pulseproducer"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,7 +28,7 @@ func init() {
 
 func main() {
 	ingestorURL := fmt.Sprintf("http://localhost:%s/ingest", INGESTOR_PORT)
-	sender := pulsesender.NewPulseSenderService(ingestorURL, minDelay, maxDelay, qtyTenants, qtySKUs)
+	sender := pulseproducer.NewPulseProducerService(ingestorURL, minDelay, maxDelay, qtyTenants, qtySKUs)
 	log.Info().Msgf("Iniciando o Envio de pulsos para %s", ingestorURL)
 
 	sender.Start()
