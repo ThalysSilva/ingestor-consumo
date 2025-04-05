@@ -153,6 +153,8 @@ Acesse o Grafana para visualizar as métricas:
 - Configure um datasource para o Prometheus (URL: `http://prometheus:9090`).
 - Crie dashboards para visualizar as métricas do Ingestor.
 
+*Nota:* O cliente Http está mockado para concluir a execução dos ciclos de envio. Caso queira integrar um servidor para receptar, será necessário remover o mock `pulse.WithCustomHTTPClient(mockHTTPClient)` dentro do main.go (`cmd/ingestor/main.go`), e então alterar a variável de ambiente do `API_URL_SENDER` para o endereço do receptor.
+
 ## Como Testar
 ### Usando o pulseProducer
 
