@@ -13,6 +13,7 @@ import (
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
 	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 )
 
 type pulseSenderService struct {
@@ -74,31 +75,30 @@ func (s *pulseSenderService) Start() {
 
 					pulse, err := s.randomPulse(tenantId)
 					if err != nil {
-						fmt.Printf("Erro ao gerar pulso: %v\n", err)
+						log.Error().Msgf("Erro ao gerar pulso: %v\n", err)
 						continue
 					}
-
-					fmt.Printf("Enviando pulso N°%d: %+v (delay: %v)\n", pulseCount, pulse, delay)
+					log.Debug().Msgf("Gerando pulso: %v\n", pulse)
 					pulseCount++
 					atomic.AddInt64(&qtyPulsesSent, 1)
 
 					jsonData, err := json.Marshal(*pulse)
 					if err != nil {
-						fmt.Printf("Erro ao codificar JSON: %v\n", err)
+						log.Error().Msgf("Erro ao codificar JSON: %v\n", err)
 						continue
 					}
 
 					resp, err := s.httpClient.Post(s.ingestorURL, "application/json", bytes.NewBuffer(jsonData))
 					if err != nil {
-						fmt.Printf("Erro ao enviar pulso: %v\n", err)
+						log.Error().Msgf("Erro ao enviar pulso: %v\n", err)
 						continue
 					}
 					resp.Body.Close()
 
 					if resp.StatusCode != http.StatusNoContent {
-						fmt.Printf("Erro ao enviar pulso. Status: %s\n", resp.Status)
+						log.Error().Msgf("Erro ao enviar pulso. Status: %s\n", resp.Status)
 					} else {
-						fmt.Printf("Pulso do cliente %s enviado com sucesso! Status: %s\n", tenantId, resp.Status)
+						log.Debug().Msgf("Pulso do cliente %s enviado com sucesso! Status: %s\n", tenantId, resp.Status)
 					}
 				}
 			}
@@ -109,8 +109,7 @@ func (s *pulseSenderService) Start() {
 func (pss *pulseSenderService) Stop() {
 	close(pss.quitChan)
 	pss.wg.Wait()
-
-	fmt.Printf("Total de pulsos enviados: %d \n", qtyPulsesSent)
+	log.Info().Msgf("Total de pulsos enviados: %d \n", qtyPulsesSent)
 }
 
 func (pss *pulseSenderService) generateSkuMap() *map[string]pulse.PulseUnit {

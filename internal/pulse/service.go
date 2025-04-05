@@ -16,6 +16,7 @@ import (
 	"github.com/ThalysSilva/ingestor-consumo/pkg/utils"
 	"github.com/go-redis/redis/v8"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog/log"
 )
 
 type PulseService interface {
@@ -54,7 +55,7 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "ingestor_pulse_processing_duration_seconds",
 			Help:    "Duração do processamento dos pulsos",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1}, // Buckets para 1ms a 1s
+			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
 		},
 	)
 	redisAccessCount = prometheus.NewCounter(
@@ -91,17 +92,30 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "ingestor_aggregation_cycle_duration_seconds",
 			Help:    "Duração do ciclo de agregação e envio",
-			Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10}, // Buckets para 100ms a 10s
+			Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+		},
+	)
+	channelBufferSize = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "ingestor_channel_buffer_size",
+			Help: "Current number of pulses in the channel buffer",
+		},
+	)
+	pulsesProcessed = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "ingestor_pulses_processed_total",
+			Help: "Total de pulsos processados pelo ingestor",
 		},
 	)
 )
 
 func init() {
-	prometheus.MustRegister(pulsesReceived, pulseProcessingTime, redisAccessCount, pulsesBatchParsedFailed, aggregationCycleTime, pulsesSentFailed, pulsesSentSuccess, pulsesNotDeleted)
+	prometheus.MustRegister(pulsesReceived, pulseProcessingTime, redisAccessCount, pulsesBatchParsedFailed, aggregationCycleTime, pulsesSentFailed, pulsesSentSuccess, pulsesNotDeleted, channelBufferSize, pulsesProcessed)
 }
 
 func NewPulseService(ctx context.Context, redisClient clients.RedisClient, apiURLSender string, batchQtyToSend int, opts ...ServiceOptions) PulseService {
 	if batchQtyToSend <= 0 {
+		log.Error().Int("batch_qty", batchQtyToSend).Msg("batchQtyToSend deve ser maior que 0")
 		panic(fmt.Sprintf("batchQtyToSend deve ser maior que 0, recebido: %d", batchQtyToSend))
 	}
 
@@ -109,7 +123,7 @@ func NewPulseService(ctx context.Context, redisClient clients.RedisClient, apiUR
 		Timeout: 10 * time.Second,
 	}
 	psv := &pulseService{
-		pulseChan:      make(chan Pulse, 10000),
+		pulseChan:      make(chan Pulse, 50000),
 		redisClient:    redisClient,
 		httpClient:     httpClient,
 		ctx:            ctx,
@@ -118,7 +132,7 @@ func NewPulseService(ctx context.Context, redisClient clients.RedisClient, apiUR
 	}
 	currentGeneration, err := psv.getCurrentGeneration()
 	if err != nil {
-		fmt.Printf("Erro ao obter a geração atual: %v\n", err)
+		log.Error().Err(err).Msg("Erro ao obter a geração atual")
 		return nil
 	}
 	psv.generation.Store(currentGeneration)
@@ -141,11 +155,16 @@ func (s *pulseService) Start(workers int, intervalToSend time.Duration) {
 func (s *pulseService) Stop() {
 	close(s.pulseChan)
 	s.wg.Wait()
-	fmt.Println("Todos os workers foram finalizados.")
+	log.Info().Msg("Todos os workers foram finalizados")
 }
 
 func (s *pulseService) EnqueuePulse(pulse Pulse) {
-	s.pulseChan <- pulse
+	select {
+	case s.pulseChan <- pulse:
+		channelBufferSize.Set(float64(len(s.pulseChan)))
+	case <-s.ctx.Done():
+		return
+	}
 }
 
 func (s *pulseService) processPulses() {
@@ -153,16 +172,14 @@ func (s *pulseService) processPulses() {
 	for pulse := range s.pulseChan {
 		start := time.Now()
 		if err := s.storePulseInRedis(s.ctx, s.redisClient, pulse); err != nil {
-			fmt.Printf("Erro ao armazenar pulso no Redis: %v\n", err)
+			log.Error().Err(err).Str("tenant_id", pulse.TenantId).Msg("Erro ao armazenar pulso no Redis")
 		} else {
-			fmt.Printf("Pulso armazenado com sucesso: %s\n", pulse.TenantId)
 			pulsesReceived.Inc()
-			fmt.Printf("Métrica pulsesReceived incrementada: %v\n", pulsesReceived)
 		}
 		duration := time.Since(start).Seconds()
-		fmt.Printf("Duração do processamento do pulso: %f segundos\n", duration)
 		pulseProcessingTime.Observe(duration)
-		fmt.Printf("Métrica pulseProcessingTime observada: %f\n", duration)
+		channelBufferSize.Set(float64(len(s.pulseChan)))
+		pulsesProcessed.Inc()
 	}
 }
 
@@ -172,10 +189,10 @@ func (s *pulseService) storePulseInRedis(ctx context.Context, client clients.Red
 		key := fmt.Sprintf("generation:%s:tenant:%s:sku:%s:useUnit:%s", gen, pulse.TenantId, pulse.ProductSku, pulse.UseUnit)
 
 		redisAccessCount.Inc()
-		fmt.Printf("Métrica redisAccessCount incrementada: %v\n", redisAccessCount)
 
 		if err := client.IncrByFloat(ctx, key, pulse.UsedAmount).Err(); err != nil {
-			return fmt.Errorf("erro ao incrementar valor no Redis: %v", err)
+			log.Error().Str("key", key).Err(err).Msg("Erro ao armazenar pulso no Redis")
+			return err
 		}
 
 		return nil
@@ -186,9 +203,7 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start).Seconds()
-		fmt.Printf("Duração do ciclo de agregação e envio: %f segundos\n", duration)
 		aggregationCycleTime.Observe(duration)
-		fmt.Printf("Métrica aggregationCycleTime observada: %f\n", duration)
 	}()
 
 	currentGen := s.generation.Load().(string)
@@ -213,19 +228,19 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 		for _, key := range batch {
 			usedAmountStr, err := s.redisClient.Get(s.ctx, key).Result()
 			if err != nil {
-				fmt.Printf("Erro ao obter chave %s: %v\n", key, err)
+				log.Error().Str("key", key).Err(err).Msg("Erro ao obter chave")
 				continue
 			}
 
 			usedAmount, err := strconv.ParseFloat(usedAmountStr, 64)
 			if err != nil {
-				fmt.Printf("Erro ao converter usedAmount para chave %s: %v\n", key, err)
+				log.Error().Str("key", key).Err(err).Msg("Erro ao converter usedAmount para chave")
 				continue
 			}
 
 			parts := strings.Split(key, ":")
 			if len(parts) != 8 {
-				fmt.Printf("Chave inválida %s: formato esperado generation:<gen>:tenant:<tenantId>:sku:<productSku>:useUnit:<useUnit>\n", key)
+				log.Warn().Str("key", key).Msg("Chave inválida: formato esperado generation:<gen>:tenant:<tenantId>:sku:<productSku>:useUnit:<useUnit>")
 				continue
 			}
 
@@ -235,7 +250,7 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 			useUnitStr := parts[7]
 
 			if gen == "" || tenantId == "" || productSku == "" || useUnitStr == "" {
-				fmt.Printf("Chave inválida %s: um ou mais campos estão vazios\n", key)
+				log.Warn().Str("key", key).Msg("Chave inválida: um ou mais campos estão vazios")
 				continue
 			}
 
@@ -255,7 +270,7 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 	}
 
 	if len(aggregatedPulses) == 0 {
-		fmt.Printf("Nenhum pulso para enviar na geração %s.\n", currentGen)
+		log.Info().Str("generation", currentGen).Msg("Nenhum pulso para enviar")
 		return nil
 	}
 
@@ -275,18 +290,16 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 
 			pulsesData, err := json.Marshal(pulses)
 			if err != nil {
-				fmt.Printf("Erro ao serializar lote %d da geração %s: %v\n", batchIndex, currentGen, err)
+				log.Error().Int("batch_index", batchIndex).Str("generation", currentGen).Err(err).Msg("Erro ao serializar lote")
 				pulsesBatchParsedFailed.Add(float64(len(pulses)))
-				fmt.Printf("Métrica pulsesBatchParsedFailed incrementada: %v\n", pulsesBatchParsedFailed)
 				errChan <- fmt.Errorf("lote %d: erro ao serializar pulsos: %v", batchIndex, err)
 				return
 			}
 
 			resp, err := s.httpClient.Post(s.apiURLSender, "application/json", bytes.NewBuffer(pulsesData))
 			if err != nil {
-				fmt.Printf("Erro ao enviar lote %d da geração %s para a API: %v\n", batchIndex, currentGen, err)
+				log.Error().Int("batch_index", batchIndex).Str("generation", currentGen).Err(err).Msg("Erro ao enviar lote para a API")
 				pulsesSentFailed.Add(float64(len(pulses)))
-				fmt.Printf("Métrica pulsesSentFailed incrementada: %v\n", pulsesSentFailed)
 				errChan <- fmt.Errorf("lote %d: erro ao enviar pulsos: %v", batchIndex, err)
 				return
 			}
@@ -297,9 +310,8 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 			}()
 
 			if resp.StatusCode != http.StatusOK {
-				fmt.Printf("Erro na resposta da API para o lote %d da geração %s: status %d\n", batchIndex, currentGen, resp.StatusCode)
+				log.Error().Int("batch_index", batchIndex).Str("generation", currentGen).Int("status_code", resp.StatusCode).Msg("Erro na resposta da API")
 				pulsesSentFailed.Add(float64(len(pulses)))
-				fmt.Printf("Métrica pulsesSentFailed incrementada: %v\n", pulsesSentFailed)
 				errChan <- fmt.Errorf("lote %d: erro na resposta da API: status %d", batchIndex, resp.StatusCode)
 				return
 			}
@@ -307,17 +319,14 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 			for _, pulse := range pulses {
 				key := fmt.Sprintf("generation:%s:tenant:%s:sku:%s:useUnit:%s", currentGen, pulse.TenantId, pulse.ProductSku, pulse.UseUnit)
 				if err := s.redisClient.Del(s.ctx, key).Err(); err != nil {
-					fmt.Printf("Erro ao apagar chave %s: %v\n", key, err)
+					log.Error().Str("key", key).Err(err).Msg("Erro ao apagar chave")
 					pulsesNotDeleted.Inc()
-					fmt.Printf("Métrica pulsesNotDeleted incrementada: %v\n", pulsesNotDeleted)
 					errChan <- fmt.Errorf("lote %d: erro ao apagar chave %s: %v", batchIndex, key, err)
 					return
 				}
 			}
 
 			pulsesSentSuccess.Add(float64(len(pulses)))
-			fmt.Printf("Métrica pulsesSentSuccess incrementada: %v\n", pulsesSentSuccess)
-			fmt.Printf("Lote %d da geração %s enviado e removido com sucesso! (%d pulsos)\n", batchIndex, currentGen, len(pulses))
 		}(batchIndex, pulses)
 	}
 
@@ -335,7 +344,6 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 		return fmt.Errorf("falhas ao enviar pulsos: %v", errors)
 	}
 
-	fmt.Printf("Pulsos da geração %s enviados e removidos com sucesso!\n", currentGen)
 	return nil
 }
 
@@ -371,11 +379,11 @@ func (s *pulseService) startAggregationLoop(interval time.Duration, stabilizatio
 	ticker := time.NewTicker(interval)
 	go func() {
 		for range ticker.C {
-			fmt.Println("Processando e enviando pulsos agregados...")
+			log.Info().Msg("Processando e enviando pulsos agregados")
 			if err := s.sendPulses(stabilizationDelay); err != nil {
-				fmt.Printf("Erro ao processar e enviar pulsos: %v\n", err)
+				log.Error().Err(err).Msg("Erro ao processar e enviar pulsos")
 			} else {
-				fmt.Println("Pulsos processados e enviados com sucesso.")
+				log.Info().Msg("Pulsos processados e enviados com sucesso")
 			}
 		}
 	}()

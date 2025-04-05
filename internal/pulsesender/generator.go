@@ -2,8 +2,10 @@ package pulsesender
 
 import (
 	"fmt"
-	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
 	"math/rand"
+
+	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
+	"github.com/rs/zerolog/log"
 )
 
 func (pss *pulseSenderService) randomPulse(tenantId string) (*pulse.Pulse, error) {
@@ -13,7 +15,7 @@ func (pss *pulseSenderService) randomPulse(tenantId string) (*pulse.Pulse, error
 	usedAmount := float64(rand.Intn(1000)) + rand.Float64()
 	pulse, err := pulse.NewPulse(tenantId, productSku, usedAmount, useUnit)
 	if err != nil {
-		fmt.Printf("Erro ao gerar pulso: %v\n", err)
+		log.Error().Msgf("Erro ao gerar pulso: %v", err)
 		return nil, err
 	}
 

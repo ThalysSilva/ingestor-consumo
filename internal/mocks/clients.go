@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
+	"github.com/rs/zerolog/log"
 )
 
 type httpClientMock struct {
@@ -26,18 +27,18 @@ func (h *httpClientMock) Post(url, contentType string, body io.Reader) (*http.Re
 	if h.err != nil {
 		return nil, h.err
 	}
-	fmt.Print("Mocking HTTP POST request to URL: ", url)
-	fmt.Print("Content-Type: ", contentType, "\n")
+	log.Debug().Msgf("Mocking HTTP POST request to URL: %s", url)
+	log.Debug().Msgf("Content-Type: %s", contentType)
+
 	// desconverter body para string para imprimir
 	bodyBytes, err := io.ReadAll(body)
-    if err != nil {
-        return nil, fmt.Errorf("erro ao ler o body: %w", err)
-    }
-    bodyString := string(bodyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler o body: %w", err)
+	}
+	bodyString := string(bodyBytes)
 
-    fmt.Println("Body: ", bodyString)
+	log.Debug().Msgf("Body: %s", bodyString)
 
-	fmt.Print("Body: ", body, "\n")
 	return &http.Response{
 		StatusCode: h.statusCode,
 		Body:       io.NopCloser(h.body),

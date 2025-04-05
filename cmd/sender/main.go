@@ -5,7 +5,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
 	"github.com/ThalysSilva/ingestor-consumo/internal/pulsesender"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -16,14 +18,18 @@ const (
 	minDelay     = 500
 	maxDelay     = 1000
 	timeDuration = 100 * time.Second
-	qtyTenants   = 1000
+	qtyTenants   = 3000
 	qtySKUs      = 10
 )
+
+func init() {
+	clients.InitLog("log_sender.log")
+}
 
 func main() {
 	ingestorURL := fmt.Sprintf("http://localhost:%s/ingest", INGESTOR_PORT)
 	sender := pulsesender.NewPulseSenderService(ingestorURL, minDelay, maxDelay, qtyTenants, qtySKUs)
-	fmt.Println("Iniciando o Envio de pulsos...")
+	log.Info().Msgf("Iniciando o Envio de pulsos para %s", ingestorURL)
 
 	sender.Start()
 	time.Sleep(timeDuration)
