@@ -109,7 +109,7 @@ func NewPulseService(ctx context.Context, redisClient clients.RedisClient, apiUR
 		Timeout: 10 * time.Second,
 	}
 	psv := &pulseService{
-		pulseChan:      make(chan Pulse, 100),
+		pulseChan:      make(chan Pulse, 10000),
 		redisClient:    redisClient,
 		httpClient:     httpClient,
 		ctx:            ctx,
