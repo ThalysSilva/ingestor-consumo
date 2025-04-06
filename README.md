@@ -360,7 +360,7 @@ stateDiagram-v2
     [*] --> Recebido: POST /ingest
     Recebido --> Enfileirado: EnqueuePulse
     Enfileirado --> Armazenado_E_Agregado: processPulses
-    Armazenado --> Selecionado: sendPulses (a cada hora)
+    Armazenado_E_Agregado --> Selecionado: sendPulses (a cada hora)
     Selecionado --> Enviado: HTTP POST
     Enviado --> Deletado: Del(chave)
     Deletado --> [*]
