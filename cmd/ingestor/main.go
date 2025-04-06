@@ -40,7 +40,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	pulseService := pulse.NewPulseService(ctx, redisClient, API_URL_SENDER, 500, pulse.WithCustomHTTPClient(mockHTTPClient))
 	pulseHandler := pulse.NewPulseHandler(pulseService)
-	go pulseService.Start(1000, time.Minute)
+	go pulseService.Start(10, time.Minute)
 
 	r := gin.Default()
 	r.POST("/ingest", pulseHandler.Ingestor())
