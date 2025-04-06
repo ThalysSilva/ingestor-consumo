@@ -259,38 +259,7 @@ sequenceDiagram
     R-->>S: Confirma deleção
 ```
 
-## Diagrama de Componentes
 
-O diagrama abaixo mostra os principais componentes do sistema e suas interações:
-
-```mermaid
-componentDiagram
-    package "Ingestor de Consumo" {
-        [Client] --> [HTTP Handler]
-        [HTTP Handler] --> [PulseService]
-        [PulseService] --> [Redis]
-        [PulseService] --> [Workers]
-        [Workers] --> [Redis]
-        [PulseService] --> [Processador & Armazenador]
-    }
-
-    package "Simulação" {
-        [PulseProducer] --> [HTTP Handler]
-    }
-
-    package "Monitoramento" {
-        [Prometheus] --> [PulseService]
-        [Grafana] --> [Prometheus]
-    }
-
-    [Redis] --> [Prometheus] : Métricas de acesso
-    [PulseService] --> [Prometheus] : Métricas (channel size, pulses sent, etc.)
-```
-#### **Explicação**
-- **Ingestor de Consumo**: Agrupa os componentes principais do Ingestor (HTTP Handler, PulseService, Workers, Redis).
-- **Simulação**: Mostra o `PulseProducer` como um componente separado que interage com o Ingestor.
-- **Monitoramento**: Destaca o uso de Prometheus e Grafana para coletar e visualizar métricas.
-- **Interações**: As setas indicam o fluxo de dados ou dependências (ex.: o `PulseService` envia pulsos para o **Processador & Armazenador**).
 
 
 ## Diagrama de Fluxo de Dados
@@ -299,14 +268,26 @@ O diagrama abaixo ilustra o fluxo de dados (pulsos) pelo sistema:
 
 ```mermaid
 flowchart TD
-    A[Client/PulseProducer] -->|Envia Pulsos| B[HTTP Handler]
-    B -->|Enfileira| C[PulseService]
-    C -->|Armazena| D[Redis]
-    C -->|Processa| E[Workers]
-    E -->|Incrementa| D
-    C -->|Agrega e Envia| F[Processador & Armazenador]
-    D -->|Métricas| G[Prometheus]
-    G -->|Visualização| H[Grafana]
+    subgraph Entrada
+        A[Client] -->|Pulsos via HTTP| B[PulseProducer]
+        B -->|Pulsos via HTTP| C[HTTP Handler]
+    end
+
+    subgraph Ingestor
+        C -->|Enfileira Pulso| D[PulseService]
+        D -->|Armazena Pulso| E[Redis]
+        D -->|Processa Pulso| F[Workers]
+        F -->|Incrementa UsedAmount| E
+        D -->|Agrega e Envia Lote| G[Processador & Armazenador]
+    end
+
+    subgraph Monitoramento
+        E -->|Métricas de Acesso| H[Prometheus]
+        D -->|Métricas (channel size, pulses sent, etc.)| H
+        H -->|Visualização| I[Grafana]
+    end
+
+    A --> C
 ```
 
 ## Diagrama de Classes
@@ -318,28 +299,28 @@ classDiagram
     class PulseService {
         <<interface>>
         +EnqueuePulse(pulse Pulse)
-        +Start(workers int, intervalToSend time.Duration)
+        +Start(workers int, intervalToSend Duration)
         +Stop()
     }
 
     class pulseService {
-        -pulseChan chan Pulse
+        -pulseChan chan_Pulse
         -redisClient RedisClient
         -httpClient HTTPClient
-        -ctx context.Context
-        -wg sync.WaitGroup
-        -generation atomic.Value
+        -ctx Context
+        -wg WaitGroup
+        -generation AtomicValue
         -apiURLSender string
         -batchQtyToSend int
         +EnqueuePulse(pulse Pulse)
-        +Start(workers int, intervalToSend time.Duration)
+        +Start(workers int, intervalToSend Duration)
         +Stop()
         -processPulses()
-        -storePulseInRedis(ctx context.Context, client RedisClient, pulse Pulse) error
-        -sendPulses(stabilizationDelay time.Duration) error
-        -getCurrentGeneration() (string, error)
-        -toggleGeneration() (string, error)
-        -startAggregationLoop(interval time.Duration, stabilizationDelay time.Duration)
+        -storePulseInRedis(ctx Context, client RedisClient, pulse Pulse) error
+        -sendPulses(stabilizationDelay Duration) error
+        -getCurrentGeneration() string_error
+        -toggleGeneration() string_error
+        -startAggregationLoop(interval Duration, stabilizationDelay Duration)
     }
 
     class Pulse {
@@ -351,16 +332,16 @@ classDiagram
 
     class RedisClient {
         <<interface>>
-        +IncrByFloat(ctx context.Context, key string, value float64) *redis.FloatCmd
-        +Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd
-        +Get(ctx context.Context, key string) *redis.StringCmd
-        +Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
-        +Del(ctx context.Context, keys ...string) *redis.IntCmd
+        +IncrByFloat(ctx Context, key string, value float64) FloatCmd
+        +Scan(ctx Context, cursor uint64, match string, count int64) ScanCmd
+        +Get(ctx Context, key string) StringCmd
+        +Set(ctx Context, key string, value string, expiration Duration) StatusCmd
+        +Del(ctx Context, keys string...) IntCmd
     }
 
     class HTTPClient {
         <<interface>>
-        +Post(url string, contentType string, body io.Reader) (*http.Response, error)
+        +Post(url string, contentType string, body Reader) Response_error
     }
 
     pulseService ..|> PulseService
