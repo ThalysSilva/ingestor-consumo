@@ -23,13 +23,11 @@ func (p PulseUnit) IsValid() bool {
 }
 
 type Pulse struct {
-	TenantId   string    `json:"tenant_id"`
-	ProductSku string    `json:"product_sku"`
-	UsedAmount float64   `json:"used_amount"`
-	UseUnit    PulseUnit `json:"use_unit"`
+	TenantId   string    `json:"tenant_id" binding:"required"`
+	ProductSku string    `json:"product_sku" binding:"required"`
+	UsedAmount float64   `json:"used_amount" binding:"required"`
+	UseUnit    PulseUnit `json:"use_unit" binding:"required"`
 }
-
-
 
 // Construtor de Pulse
 func NewPulse(tenantId, productSku string, usedAmount float64, useUnit PulseUnit) (*Pulse, error) {
