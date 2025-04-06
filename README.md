@@ -275,7 +275,7 @@ flowchart TD
 
     subgraph Ingestor
         C -->|Enfileira_Pulso| D[PulseService]
-        D -->|Armazena_Pulso| E[Redis]
+        D -->|Armazena_Geração| E[Redis]
         D -->|Processa_Pulso| F[Workers]
         F -->|Incrementa_UsedAmount| E
         D -->|Agrega_e_Envia_Lote| G[Processador_e_Armazenador]
@@ -359,9 +359,9 @@ O diagrama abaixo mostra o ciclo de vida de um pulso no sistema:
 stateDiagram-v2
     [*] --> Recebido: POST /ingest
     Recebido --> Enfileirado: EnqueuePulse
-    Enfileirado --> Armazenado: processPulses
-    Armazenado --> Agregado: sendPulses (a cada hora)
-    Agregado --> Enviado: HTTP POST
+    Enfileirado --> Armazenado_E_Agregado: processPulses
+    Armazenado --> Selecionado: sendPulses (a cada hora)
+    Selecionado --> Enviado: HTTP POST
     Enviado --> Deletado: Del(chave)
     Deletado --> [*]
 ```
