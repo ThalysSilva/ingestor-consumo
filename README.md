@@ -258,6 +258,135 @@ sequenceDiagram
     S->>R: Del(chave)
     R-->>S: Confirma deleção
 ```
+
+## Diagrama de Componentes
+
+O diagrama abaixo mostra os principais componentes do sistema e suas interações:
+
+```mermaid
+componentDiagram
+    package "Ingestor de Consumo" {
+        [Client] --> [HTTP Handler]
+        [HTTP Handler] --> [PulseService]
+        [PulseService] --> [Redis]
+        [PulseService] --> [Workers]
+        [Workers] --> [Redis]
+        [PulseService] --> [Processador & Armazenador]
+    }
+
+    package "Simulação" {
+        [PulseProducer] --> [HTTP Handler]
+    }
+
+    package "Monitoramento" {
+        [Prometheus] --> [PulseService]
+        [Grafana] --> [Prometheus]
+    }
+
+    [Redis] --> [Prometheus] : Métricas de acesso
+    [PulseService] --> [Prometheus] : Métricas (channel size, pulses sent, etc.)
+```
+#### **Explicação**
+- **Ingestor de Consumo**: Agrupa os componentes principais do Ingestor (HTTP Handler, PulseService, Workers, Redis).
+- **Simulação**: Mostra o `PulseProducer` como um componente separado que interage com o Ingestor.
+- **Monitoramento**: Destaca o uso de Prometheus e Grafana para coletar e visualizar métricas.
+- **Interações**: As setas indicam o fluxo de dados ou dependências (ex.: o `PulseService` envia pulsos para o **Processador & Armazenador**).
+
+
+## Diagrama de Fluxo de Dados
+
+O diagrama abaixo ilustra o fluxo de dados (pulsos) pelo sistema:
+
+```mermaid
+flowchart TD
+    A[Client/PulseProducer] -->|Envia Pulsos| B[HTTP Handler]
+    B -->|Enfileira| C[PulseService]
+    C -->|Armazena| D[Redis]
+    C -->|Processa| E[Workers]
+    E -->|Incrementa| D
+    C -->|Agrega e Envia| F[Processador & Armazenador]
+    D -->|Métricas| G[Prometheus]
+    G -->|Visualização| H[Grafana]
+```
+
+## Diagrama de Classes
+
+O diagrama abaixo mostra a estrutura estática do código, incluindo as principais structs e interfaces:
+
+```mermaid
+classDiagram
+    class PulseService {
+        <<interface>>
+        +EnqueuePulse(pulse Pulse)
+        +Start(workers int, intervalToSend time.Duration)
+        +Stop()
+    }
+
+    class pulseService {
+        -pulseChan chan Pulse
+        -redisClient RedisClient
+        -httpClient HTTPClient
+        -ctx context.Context
+        -wg sync.WaitGroup
+        -generation atomic.Value
+        -apiURLSender string
+        -batchQtyToSend int
+        +EnqueuePulse(pulse Pulse)
+        +Start(workers int, intervalToSend time.Duration)
+        +Stop()
+        -processPulses()
+        -storePulseInRedis(ctx context.Context, client RedisClient, pulse Pulse) error
+        -sendPulses(stabilizationDelay time.Duration) error
+        -getCurrentGeneration() (string, error)
+        -toggleGeneration() (string, error)
+        -startAggregationLoop(interval time.Duration, stabilizationDelay time.Duration)
+    }
+
+    class Pulse {
+        +TenantId string
+        +ProductSku string
+        +UsedAmount float64
+        +UseUnit PulseUnit
+    }
+
+    class RedisClient {
+        <<interface>>
+        +IncrByFloat(ctx context.Context, key string, value float64) *redis.FloatCmd
+        +Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd
+        +Get(ctx context.Context, key string) *redis.StringCmd
+        +Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+        +Del(ctx context.Context, keys ...string) *redis.IntCmd
+    }
+
+    class HTTPClient {
+        <<interface>>
+        +Post(url string, contentType string, body io.Reader) (*http.Response, error)
+    }
+
+    pulseService ..|> PulseService
+    pulseService --> RedisClient
+    pulseService --> HTTPClient
+    pulseService --> Pulse
+
+```
+
+## Diagrama de Estados
+
+O diagrama abaixo mostra o ciclo de vida de um pulso no sistema:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Recebido: POST /ingest
+    Recebido --> Enfileirado: EnqueuePulse
+    Enfileirado --> Armazenado: processPulses
+    Armazenado --> Agregado: sendPulses (a cada hora)
+    Agregado --> Enviado: HTTP POST
+    Enviado --> Deletado: Del(chave)
+    Deletado --> [*]
+```
+
+
+
 ## Licença
 
 Este projeto está licenciado sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
