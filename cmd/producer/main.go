@@ -23,7 +23,7 @@ const (
 )
 
 func init() {
-	clients.InitLog("log_sender.log")
+	clients.InitLog("log_producer.log")
 }
 
 func main() {
