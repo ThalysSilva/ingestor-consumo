@@ -269,22 +269,22 @@ O diagrama abaixo ilustra o fluxo de dados (pulsos) pelo sistema:
 ```mermaid
 flowchart TD
     subgraph Entrada
-        A[Client] -->|Pulsos via HTTP| B[PulseProducer]
-        B -->|Pulsos via HTTP| C[HTTP Handler]
+        A[Client] -->|Pulsos_via_HTTP| B[PulseProducer]
+        B -->|Pulsos_via_HTTP| C[HTTP_Handler]
     end
 
     subgraph Ingestor
-        C -->|Enfileira Pulso| D[PulseService]
-        D -->|Armazena Pulso| E[Redis]
-        D -->|Processa Pulso| F[Workers]
-        F -->|Incrementa UsedAmount| E
-        D -->|Agrega e Envia Lote| G[Processador & Armazenador]
+        C -->|Enfileira_Pulso| D[PulseService]
+        D -->|Armazena_Pulso| E[Redis]
+        D -->|Processa_Pulso| F[Workers]
+        F -->|Incrementa_UsedAmount| E
+        D -->|Agrega_e_Envia_Lote| G[Processador_e_Armazenador]
     end
 
     subgraph Monitoramento
-        E -->|Métricas de Acesso| H[Prometheus]
-        D -->|Métricas (channel size, pulses sent, etc.)| H
-        H -->|Visualização| I[Grafana]
+        E -->|Metricas_de_Acesso| H[Prometheus]
+        D -->|Metricas_channel_size_e_pulses_sent| H
+        H -->|Visualizacao| I[Grafana]
     end
 
     A --> C
