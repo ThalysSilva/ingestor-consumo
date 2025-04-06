@@ -283,7 +283,7 @@ flowchart TD
 
     subgraph Monitoramento
         E -->|Metricas_de_Acesso| H[Prometheus]
-        D -->|Metricas_channel_size_e_pulses_sent| H
+        D -->|Metricas| H
         H -->|Visualizacao| I[Grafana]
     end
 
