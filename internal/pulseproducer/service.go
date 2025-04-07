@@ -57,12 +57,14 @@ func NewPulseProducerService(ingestorURL string, minDelay, maxDelay, qtyTenants,
 	return &psv
 }
 
+var marshalFunc = json.Marshal
+var uuidFunc = func() string { return uuid.New().String() }
+
 func (s *pulseProducerService) Start() {
 	for range s.qtyTenants {
 		s.wg.Add(1)
 		go func() {
-			tenantId := uuid.New().String()
-
+			tenantId := uuidFunc()
 			defer s.wg.Done()
 			pulseCount := 1
 			for {
@@ -82,7 +84,7 @@ func (s *pulseProducerService) Start() {
 					pulseCount++
 					atomic.AddInt64(&qtyPulsesSent, 1)
 
-					jsonData, err := json.Marshal(*pulse)
+					jsonData, err := marshalFunc(*pulse)
 					if err != nil {
 						log.Error().Msgf("Erro ao codificar JSON: %v\n", err)
 						continue

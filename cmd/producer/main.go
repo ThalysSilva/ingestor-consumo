@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
@@ -23,7 +25,13 @@ const (
 )
 
 func init() {
-	clients.InitLog("log_producer.log")
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		fmt.Println("falha ao obter o caminho do arquivo atual")
+		os.Exit(1)
+	}
+	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(filename)))
+	clients.InitLog("log_producer.log", projectRoot)
 }
 
 func main() {

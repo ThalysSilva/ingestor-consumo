@@ -9,6 +9,10 @@ import (
 )
 
 func (pss *pulseProducerService) randomPulse(tenantId string) (*pulse.Pulse, error) {
+	if tenantId == "" {
+		log.Error().Msg("TenantId não pode ser vazio")
+		return nil, fmt.Errorf("tenantId não pode ser vazio")
+	}
 	skuSelector := rand.Intn(len(*pss.skuMap))
 	productSku := fmt.Sprintf("SKU-%d", skuSelector)
 	useUnit := (*pss.skuMap)[productSku]

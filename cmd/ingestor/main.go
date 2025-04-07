@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
+
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
-	"github.com/ThalysSilva/ingestor-consumo/internal/mocks"
 	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -22,20 +26,60 @@ var (
 	REDIS_HOST     = os.Getenv("REDIS_HOST")
 )
 
-var (
-	ctx            = context.Background()
-	mockHTTPClient = mocks.NewHttpClientMock(200, nil, nil)
-)
+type httpClientMock struct {
+	statusCode int
+	body       io.Reader
+	err        error
+}
+
+func NewHttpClientMock(statusCode int, body io.Reader, err error) clients.HTTPClient {
+	return &httpClientMock{
+		statusCode: statusCode,
+		body:       body,
+		err:        err,
+	}
+}
+
+func (h *httpClientMock) Post(url, contentType string, body io.Reader) (*http.Response, error) {
+	if h.err != nil {
+		return nil, h.err
+	}
+	log.Debug().Msgf("Mocking HTTP POST request to URL: %s", url)
+	log.Debug().Msgf("Content-Type: %s", contentType)
+
+	// desconverter body para string para imprimir
+	bodyBytes, err := io.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler o body: %w", err)
+	}
+	bodyString := string(bodyBytes)
+
+	log.Debug().Msgf("Body: %s", bodyString)
+
+	return &http.Response{
+		StatusCode: h.statusCode,
+		Body:       io.NopCloser(h.body),
+	}, nil
+}
 
 func init() {
-	clients.InitLog("log_ingestor.log")
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		fmt.Println("falha ao obter o caminho do arquivo atual")
+		os.Exit(1)
+	}
+	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(filename)))
+	clients.InitLog("log_ingestor.log", projectRoot)
 }
 
 func main() {
+	ctx := context.Background()
+	mockHTTPClient := NewHttpClientMock(200, nil, nil)
 	redisClient := clients.InitRedisClient(REDIS_HOST, REDIS_PORT)
 	defer redisClient.Close()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	pulseService := pulse.NewPulseService(ctx, redisClient, API_URL_SENDER, 500, pulse.WithCustomHTTPClient(mockHTTPClient))

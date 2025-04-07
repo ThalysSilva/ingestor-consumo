@@ -199,6 +199,8 @@ func (s *pulseService) storePulseInRedis(ctx context.Context, client clients.Red
 	}, 3)
 }
 
+var marshalFunc = json.Marshal
+
 func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 	start := time.Now()
 	defer func() {
@@ -288,14 +290,13 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			pulsesData, err := json.Marshal(pulses)
+			pulsesData, err := marshalFunc(pulses)
 			if err != nil {
 				log.Error().Int("batch_index", batchIndex).Str("generation", currentGen).Err(err).Msg("Erro ao serializar lote")
 				pulsesBatchParsedFailed.Add(float64(len(pulses)))
 				errChan <- fmt.Errorf("lote %d: erro ao serializar pulsos: %v", batchIndex, err)
 				return
 			}
-
 			resp, err := s.httpClient.Post(s.apiURLSender, "application/json", bytes.NewBuffer(pulsesData))
 			if err != nil {
 				log.Error().Int("batch_index", batchIndex).Str("generation", currentGen).Err(err).Msg("Erro ao enviar lote para a API")

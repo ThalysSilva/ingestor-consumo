@@ -8,3 +8,5 @@ import (
 type HTTPClient interface {
 	Post(url, contentType string, body io.Reader) (*http.Response, error)
 }
+
+
