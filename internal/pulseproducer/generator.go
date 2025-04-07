@@ -8,6 +8,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+
+// randomPulse gera um pulso aleatório com o TenantId informado
 func (pss *pulseProducerService) randomPulse(tenantId string) (*pulse.Pulse, error) {
 	if tenantId == "" {
 		log.Error().Msg("TenantId não pode ser vazio")
@@ -26,6 +28,7 @@ func (pss *pulseProducerService) randomPulse(tenantId string) (*pulse.Pulse, err
 	return pulse, nil
 }
 
+// randomPulseUnit retorna uma unidade de pulso aleatória
 func (pss *pulseProducerService) randomPulseUnit() pulse.PulseUnit {
 	units := []pulse.PulseUnit{pulse.KB, pulse.MB, pulse.GB, pulse.KBxSec, pulse.MBxSec, pulse.GBxSec}
 	return units[rand.Intn(len(units))]

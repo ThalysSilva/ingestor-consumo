@@ -17,7 +17,6 @@ import (
 type MockPulseService struct {
 	mock.Mock
 }
-
 func (m *MockPulseService) EnqueuePulse(pulse Pulse) {
 	m.Called(pulse)
 }

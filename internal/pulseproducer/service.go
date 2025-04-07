@@ -28,12 +28,25 @@ type pulseProducerService struct {
 	httpClient  clients.HTTPClient
 }
 type PulseProducerService interface {
+	// Inicia o serviço de produção de pulsos
+	// Inicia a produção de pulsos com base na quantidade de Tenants e no intervalo de tempo
 	Start()
+
+	// Para o serviço de produção de pulsos
 	Stop()
 }
 
 var qtyPulsesSent int64
 
+// NewPulseProducerService cria um novo serviço de produção de pulsos.
+// O serviço de produção de pulsos é responsável por gerar pulsos aleatórios
+// Recebe a URL do ingestor, o intervalo mínimo e máximo de atraso entre os pulsos,
+// a quantidade de Tenants e a quantidade de SKUs como parâmetros
+// e retorna um ponteiro para o serviço de produção de pulsos.
+// O cliente HTTP é configurado com um tempo limite de 5 segundos,
+// 100 conexões simultâneas e um tempo limite de conexão ociosa de 30 segundos.
+// É possível personalizar o cliente HTTP, se necessário.
+// O serviço de produção de pulsos é iniciado com o método Start() e parado com o método Stop().
 func NewPulseProducerService(ingestorURL string, minDelay, maxDelay, qtyTenants, qtySKUs int) PulseProducerService {
 	httpClient := &http.Client{
 		Timeout: 5 * time.Second,
@@ -113,7 +126,7 @@ func (s *pulseProducerService) Stop() {
 	s.wg.Wait()
 	log.Info().Msgf("Total de pulsos enviados: %d \n", qtyPulsesSent)
 }
-
+// generateSkuMap gera um mapa de SKUs aleatórios com unidades de pulso associadas
 func (s *pulseProducerService) generateSkuMap() *map[string]pulse.PulseUnit {
 	skuMap := make(map[string]pulse.PulseUnit)
 	for i := range s.qtySKUs {

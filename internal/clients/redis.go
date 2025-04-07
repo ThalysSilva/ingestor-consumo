@@ -57,12 +57,14 @@ func (r *redisClient) PoolStats() *redis.PoolStats {
 
 type RedisClientOptions func(*redisClient)
 
+// WithCustomRedisClient permite passar um cliente Redis customizado
 func WithCustomRedisClient(client RedisClient) RedisClientOptions {
 	return func(r *redisClient) {
 		r.client = client
 	}
 }
-
+// Cria um cliente Redis com as opções padrão
+// DialTimeout: 5s, ReadTimeout: 3s, WriteTimeout: 3s, PoolSize: 100, MinIdleConns: 10, MaxRetries: 3
 func createRedisClient(host, port string, opts ...RedisClientOptions) RedisClient {
 	clientCreated := &redisClient{
 		client: redis.NewClient(&redis.Options{
@@ -81,7 +83,7 @@ func createRedisClient(host, port string, opts ...RedisClientOptions) RedisClien
 	}
 	return clientCreated.client
 }
-
+// Cria um cliente Redis com as opções padrão e verifica a conexão
 func InitRedisClient(host, port string, opts ...RedisClientOptions) RedisClient {
 	client := createRedisClient(host, port, opts...)
 

@@ -20,8 +20,20 @@ import (
 )
 
 type PulseService interface {
+	// EnqueuePulse adiciona um pulso ao canal pulseChan para processamento. 
+	// O método verifica se o contexto foi cancelado antes de adicionar o pulso ao canal. 
+	// Se o canal estiver cheio, o método não adiciona o pulso e não bloqueia.
 	EnqueuePulse(pulse Pulse)
+
+	// Start inicia o serviço de pulsos, criando os workers para processar os pulsos recebidos. 
+	// O parâmetro workers define o número de workers a serem criados. 
+	// O parâmetro intervalToSend define o intervalo de tempo entre os envios de pulsos agregados. 
+	// O método aguarda a finalização de todos os workers antes de retornar. 
 	Start(workers int, intervalToSend time.Duration)
+
+	// Stop finaliza o serviço de pulsos, fechando o canal de pulsos e aguardando a finalização dos workers. 
+	// O método aguarda a finalização de todos os workers antes de retornar. 
+	// O método não deve ser chamado antes de iniciar o serviço. 
 	Stop()
 }
 
@@ -38,6 +50,7 @@ type pulseService struct {
 
 type ServiceOptions func(*pulseService)
 
+// WithCustomRedisClient permite definir um cliente Http personalizado
 func WithCustomHTTPClient(client clients.HTTPClient) ServiceOptions {
 	return func(ps *pulseService) {
 		ps.httpClient = client
@@ -113,6 +126,13 @@ func init() {
 	prometheus.MustRegister(pulsesReceived, pulseProcessingTime, redisAccessCount, pulsesBatchParsedFailed, aggregationCycleTime, pulsesSentFailed, pulsesSentSuccess, pulsesNotDeleted, channelBufferSize, pulsesProcessed)
 }
 
+// NewPulseService cria uma nova instância do serviço de pulsos
+// com um cliente Redis e uma URL de API para envio de pulsos
+// O parâmetro batchQtyToSend define a quantidade de pulsos a serem enviados em cada lote
+// O parâmetro opts permite passar opções adicionais para o serviço
+// O parâmetro ctx é o contexto de execução
+// O parâmetro redisClient é o cliente Redis a ser utilizado
+// O parâmetro apiURLSender é a URL da API para envio de pulsos após agregação
 func NewPulseService(ctx context.Context, redisClient clients.RedisClient, apiURLSender string, batchQtyToSend int, opts ...ServiceOptions) PulseService {
 	if batchQtyToSend <= 0 {
 		log.Error().Int("batch_qty", batchQtyToSend).Msg("batchQtyToSend deve ser maior que 0")
@@ -144,6 +164,7 @@ func NewPulseService(ctx context.Context, redisClient clients.RedisClient, apiUR
 	return psv
 }
 
+
 func (s *pulseService) Start(workers int, intervalToSend time.Duration) {
 	for range workers {
 		s.wg.Add(1)
@@ -151,6 +172,7 @@ func (s *pulseService) Start(workers int, intervalToSend time.Duration) {
 	}
 	s.startAggregationLoop(intervalToSend, 5*time.Second)
 }
+
 
 func (s *pulseService) Stop() {
 	close(s.pulseChan)
@@ -167,6 +189,9 @@ func (s *pulseService) EnqueuePulse(pulse Pulse) {
 	}
 }
 
+// processPulses processa os pulsos recebidos do canal pulseChan
+// O método aguarda a chegada de pulsos e os armazena no Redis
+// Caso ocorra um erro ao armazenar o pulso, ele é registrado no log
 func (s *pulseService) processPulses() {
 	defer s.wg.Done()
 	for pulse := range s.pulseChan {
@@ -183,6 +208,9 @@ func (s *pulseService) processPulses() {
 	}
 }
 
+// O método é executado em um goroutine e aguarda a finalização do worker
+// O método processa os pulsos recebidos do canal pulseChan e os armazena no Redis
+// Caso ocorra um erro ao armazenar o pulso, ele é registrado no log
 func (s *pulseService) storePulseInRedis(ctx context.Context, client clients.RedisClient, pulse Pulse) error {
 	return utils.Retry(func() error {
 		gen := s.generation.Load().(string)
@@ -199,8 +227,13 @@ func (s *pulseService) storePulseInRedis(ctx context.Context, client clients.Red
 	}, 3)
 }
 
+// Função definida em var para permitir testes
 var marshalFunc = json.Marshal
 
+// sendPulses envia os pulsos agregados para a API
+// O método alterna a geração atual e aguarda um tempo de estabilização
+// O método escaneia as chaves do Redis que correspondem ao padrão definido
+// O método agrupa os pulsos em lotes e os envia para a API
 func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 	start := time.Now()
 	defer func() {
@@ -348,6 +381,10 @@ func (s *pulseService) sendPulses(stabilizationDelay time.Duration) error {
 	return nil
 }
 
+
+// getCurrentGeneration obtém a geração atual do Redis
+// Se a chave não existir, cria uma nova chave com o valor "A"
+// Retorna a geração atual e um erro, se houver
 func (s *pulseService) getCurrentGeneration() (string, error) {
 	gen, err := s.redisClient.Get(s.ctx, "current_generation").Result()
 	if err == redis.Nil {
@@ -361,6 +398,9 @@ func (s *pulseService) getCurrentGeneration() (string, error) {
 	return gen, nil
 }
 
+// toggleGeneration alterna a geração atual entre "A" e "B"
+// Atualiza a chave "current_generation" no Redis com o novo valor
+// Retorna a nova geração e um erro, se houver
 func (s *pulseService) toggleGeneration() (nextGen string, err error) {
 	currentGen := s.generation.Load().(string)
 
@@ -376,6 +416,11 @@ func (s *pulseService) toggleGeneration() (nextGen string, err error) {
 	return nextGen, nil
 }
 
+
+// startAggregationLoop inicia um loop que processa e envia pulsos agregados
+// O loop é executado em um intervalo definido pelo parâmetro interval
+// O parâmetro stabilizationDelay define o tempo de estabilização após a troca de geração antes do envio para a API de destino.
+// O loop é executado em uma goroutine separada
 func (s *pulseService) startAggregationLoop(interval time.Duration, stabilizationDelay time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {

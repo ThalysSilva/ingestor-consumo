@@ -1,0 +1,61 @@
+definitions:
+  internal_pulse.Pulse:
+    properties:
+      product_sku:
+        description: ProductSku é o SKU do produto, geralmente segue o padrão "SKU-<numero>"
+        type: string
+      tenant_id:
+        type: string
+      use_unit:
+        allOf:
+        - $ref: '#/definitions/internal_pulse.PulseUnit'
+        description: UseUnit é a unidade utilizada para o valor utilizado do produto
+      used_amount:
+        description: UsedAmount é o valor utilizado do produto
+        type: number
+    required:
+    - product_sku
+    - tenant_id
+    - use_unit
+    - used_amount
+    type: object
+  internal_pulse.PulseUnit:
+    enum:
+    - KB
+    - MB
+    - GB
+    - KB/sec
+    - MB/sec
+    - GB/sec
+    type: string
+    x-enum-varnames:
+    - KB
+    - MB
+    - GB
+    - KBxSec
+    - MBxSec
+    - GBxSec
+info:
+  contact: {}
+paths:
+  /pulse/ingestor:
+    post:
+      consumes:
+      - application/json
+      description: Ingestor de pulsos
+      parameters:
+      - description: Pulse
+        in: body
+        name: pulse
+        required: true
+        schema:
+          $ref: '#/definitions/internal_pulse.Pulse'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      summary: Ingestor de pulsos
+      tags:
+      - Pulso
+swagger: "2.0"

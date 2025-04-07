@@ -17,6 +17,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	_ "github.com/ThalysSilva/ingestor-consumo/docs" 
 )
 
 var (
@@ -32,6 +35,8 @@ type httpClientMock struct {
 	err        error
 }
 
+// NewHttpClientMock cria um novo mock de cliente HTTP 
+// com o statusCode, body e err especificados.
 func NewHttpClientMock(statusCode int, body io.Reader, err error) clients.HTTPClient {
 	return &httpClientMock{
 		statusCode: statusCode,
@@ -47,7 +52,6 @@ func (h *httpClientMock) Post(url, contentType string, body io.Reader) (*http.Re
 	log.Debug().Msgf("Mocking HTTP POST request to URL: %s", url)
 	log.Debug().Msgf("Content-Type: %s", contentType)
 
-	// desconverter body para string para imprimir
 	bodyBytes, err := io.ReadAll(body)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao ler o body: %w", err)
@@ -87,8 +91,14 @@ func main() {
 	go pulseService.Start(10, time.Minute)
 
 	r := gin.Default()
+
 	r.POST("/ingest", pulseHandler.Ingestor())
+
+	// Métricas do Prometheus
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Swagger
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	go func() {
 		// fmt.Printf("Servidor rodando em :%s e métricas em :%s/metrics\n", INGESTOR_PORT, INGESTOR_PORT)

@@ -27,6 +27,11 @@ func (lw *levelWriter) WriteLevel(level zerolog.Level, p []byte) (n int, err err
 	return len(p), nil
 }
 
+// InitLog inicializa o logger com o arquivo de log e o caminho base
+// O logger é configurado para gravar logs em um arquivo com rotação de logs
+// e também exibe os logs no console, a menos que o parâmetro silent seja passado como true.
+// O arquivo de log é criado no diretório especificado por basePath/log
+// O nome do arquivo de log é especificado por fileName.
 func InitLog(fileName string, basePath string, silent ...bool) (lumberjackLogger *lumberjack.Logger, logFilePath string) {
 	logDir := filepath.Join(basePath, "log")
 	logFilePath = filepath.Join(logDir, fileName)
