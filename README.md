@@ -26,8 +26,6 @@ O sistema suporta 2000 req/s e foi projetado para ser escalável em produção. 
   - _http.go:_ Cliente HTTP para envio de pulsos.
   - _log.go:_ Configuração do logging com Zerolog.
   - _redis.go:_ Cliente Redis para persistência e agregação.
-- **internal/mocks/:** Mocks para testes.
-  - _clients.go:_ Mock para o cliente HTTP.
 - **internal/pulse/:** Lógica do Ingestor.
   - _domain.go:_ Definição da estrutura de um pulso.
   - _handler.go:_ Handler HTTP para o endpoint /ingest.
@@ -52,6 +50,8 @@ O sistema suporta 2000 req/s e foi projetado para ser escalável em produção. 
 - **go.mod:** Dependências do Go.
 - **go.sum:** Dependências do Go.
 
+_Nota:_ A maioria dos arquivos terá seus respectivos testes terminados em _test.go.
+
 ## Como Instalar
 
 Clone o repositório:
@@ -75,7 +75,7 @@ Crie um arquivo **.env** na raiz do projeto com as seguintes variáveis (você p
 INGESTOR_PORT=8070
 REDIS_HOST=redis
 REDIS_PORT=6379
-API_URL_SENDER=http://localhost:9090/process
+API_URL_SENDER=http://localhost:8090/process
 ```
 
 - `REDIS_HOST=redis` refere-se ao nome do serviço Redis no Docker Compose.
@@ -130,10 +130,10 @@ Isso iniciará:
 Execute o Ingestor localmente:
 
 ### Windows:
-
 ```bash
 .\scripts\run_ingestor.ps1
 ```
+_Nota:_ É necessário liberar a execução de scripts do windows. Para isso, Abra um powershell em **modo de administrador** e execute: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
 
 ### Linux:
 
@@ -156,7 +156,7 @@ Acesse o Grafana para visualizar as métricas:
 - Configure um datasource para o Prometheus (URL: `http://prometheus:9090`).
 - Crie dashboards para visualizar as métricas do Ingestor.
 
-_Nota:_ O cliente Http está mockado para concluir a execução dos ciclos de envio. Caso queira integrar um servidor para receptar, será necessário remover o mock `pulse.WithCustomHTTPClient(mockHTTPClient)` dentro do main.go (`cmd/ingestor/main.go`), e então alterar a variável de ambiente do `API_URL_SENDER` para o endereço do receptor.
+_Nota:_ O cliente Http está mockado para concluir a execução dos ciclos de envio. Caso queira integrar um servidor para receptar, será necessário remover o mock `pulse.WithCustomHTTPClient(mockHTTPClient)` dentro do main.go (`cmd/ingestor/main.go`), além de toda definição deles. Também é necessário alterar a variável de ambiente do `API_URL_SENDER` para o endereço do receptor desejado.
 
 ## Como Testar
 
