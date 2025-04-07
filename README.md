@@ -199,7 +199,7 @@ curl -X POST http://localhost:8070/ingest -H "Content-Type: application/json" -d
 ## Verificação
 
 - Verifique os logs do Ingestor no console e no arquivo `log/log_ingestor.log`.
-- Verifique os logs do pulseProducer no console e no arquivo `log/log_sender.log`.
+- Verifique os logs do pulseProducer no console e no arquivo `log/log_producer.log`.
 - Acesse as métricas em `http://localhost:8070/metrics`.
 - Visualize os dados no Grafana (`http://localhost:3000`).
 
