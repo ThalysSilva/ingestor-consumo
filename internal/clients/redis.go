@@ -63,11 +63,24 @@ func WithCustomRedisClient(client RedisClient) RedisClientOptions {
 		r.client = client
 	}
 }
+
 // Cria um cliente Redis com as opções padrão
 // DialTimeout: 5s, ReadTimeout: 3s, WriteTimeout: 3s, PoolSize: 100, MinIdleConns: 10, MaxRetries: 3
-func createRedisClient(host, port string, opts ...RedisClientOptions) RedisClient {
-	clientCreated := &redisClient{
-		client: redis.NewClient(&redis.Options{
+func createRedisClient(host, port string, sentinelAddrs []string, opts ...RedisClientOptions) RedisClient {
+	newRedisClient := &redis.Client{}
+	if len(sentinelAddrs) > 0 {
+		newRedisClient = redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:    "mymaster",
+			SentinelAddrs: sentinelAddrs,
+			DialTimeout:   5 * time.Second,
+			ReadTimeout:   3 * time.Second,
+			WriteTimeout:  3 * time.Second,
+			PoolSize:      100,
+			MinIdleConns:  10,
+			MaxRetries:    3,
+		})
+	} else {
+		newRedisClient = redis.NewClient(&redis.Options{
 			Addr:         host + ":" + port,
 			DialTimeout:  5 * time.Second,
 			ReadTimeout:  3 * time.Second,
@@ -75,7 +88,11 @@ func createRedisClient(host, port string, opts ...RedisClientOptions) RedisClien
 			PoolSize:     100,
 			MinIdleConns: 10,
 			MaxRetries:   3,
-		}),
+		})
+	}
+
+	clientCreated := &redisClient{
+		client: newRedisClient,
 	}
 
 	for _, opt := range opts {
@@ -83,9 +100,10 @@ func createRedisClient(host, port string, opts ...RedisClientOptions) RedisClien
 	}
 	return clientCreated.client
 }
+
 // Cria um cliente Redis com as opções padrão e verifica a conexão
-func InitRedisClient(host, port string, opts ...RedisClientOptions) RedisClient {
-	client := createRedisClient(host, port, opts...)
+func InitRedisClient(host, port string, sentinelAddrs []string, opts ...RedisClientOptions) RedisClient {
+	client := createRedisClient(host, port, sentinelAddrs, opts...)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

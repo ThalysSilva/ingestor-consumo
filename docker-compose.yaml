@@ -1,14 +1,109 @@
 services:
-  redis:
+  ingestor:
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+    container_name: ingestor
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - redis-primary
+      - redis-sentinel-1
+      - redis-sentinel-2
+      - redis-sentinel-3    
+    networks:
+      - pulse-ingestor-network
+
+  redis-primary:
     image: redis:latest
+    container_name: redis-primary
     ports:
       - "6379:6379"
-    command: redis-server --maxclients 10000 --tcp-backlog 511 --timeout 0 --save "" --appendonly no
+    command: redis-server --maxclients 10000 --tcp-backlog 511 --timeout 0 --appendonly yes --appendfsync everysec
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     deploy:
       resources:
         limits:
           cpus: "1.0"
           memory: 512M
+    networks:
+      - pulse-ingestor-network
+
+  redis-replica:
+    image: redis:latest
+    container_name: redis-replica
+    ports:
+      - "6380:6379"
+    command: redis-server --maxclients 10000 --tcp-backlog 511 --timeout 0 --appendonly yes --appendfsync everysec --replicaof redis-primary 6379
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    networks:
+      - pulse-ingestor-network
+
+  redis-sentinel-1:
+    image: redis:latest
+    container_name: redis-sentinel-1
+    entrypoint: ["/entrypoint.sh"]
+    volumes:
+      - ./build/entrypoint.sh:/entrypoint.sh
+      - ./build/sentinel-data-1:/etc/redis
+    ports:
+      - "26379:26379"
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+      redis-replica:
+        condition: service_started
+    networks:
+      - pulse-ingestor-network
+
+  redis-sentinel-2:
+    image: redis:latest
+    container_name: redis-sentinel-2
+    entrypoint: ["/entrypoint.sh"]
+    volumes:
+      - ./build/entrypoint.sh:/entrypoint.sh
+      - ./build/sentinel-data-2:/etc/redis
+    ports:
+      - "26380:26379"
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+      redis-replica:
+        condition: service_started
+    networks:
+      - pulse-ingestor-network
+
+  redis-sentinel-3:
+    image: redis:latest
+    container_name: redis-sentinel-3
+    entrypoint: ["/entrypoint.sh"]
+    volumes:
+      - ./build/entrypoint.sh:/entrypoint.sh
+      - ./build/sentinel-data-3:/etc/redis
+    ports:
+      - "26381:26379"
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+      redis-replica:
+        condition: service_started
     networks:
       - pulse-ingestor-network
 
@@ -18,7 +113,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./build/prometheus.yml:/etc/prometheus/prometheus.yml
     networks:
       - pulse-ingestor-network
 
@@ -32,7 +127,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana-storage:/var/lib/grafana
-      - ./grafana-provisioning:/etc/grafana/provisioning
+      - ./build/grafana-provisioning:/etc/grafana/provisioning
     depends_on:
       - prometheus
     networks:
@@ -41,7 +136,11 @@ services:
 volumes:
   grafana-storage:
     driver: local
-  redis:
+  sentinel-data-1:
+    driver: local
+  sentinel-data-2:
+    driver: local
+  sentinel-data-3:
     driver: local
 
 networks:

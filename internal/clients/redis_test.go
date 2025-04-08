@@ -107,7 +107,7 @@ func TestRedisInit(t *testing.T) {
 			Misses:   0,
 			Timeouts: 0,
 		})
-		client := InitRedisClient("localhost", "6379", WithCustomRedisClient(redisClientMock))
+		client := InitRedisClient("localhost", "6379", nil, WithCustomRedisClient(redisClientMock))
 
 		if client == nil {
 			t.Fatal("Failed to create RedisClient")
@@ -124,7 +124,7 @@ func TestRedisInit(t *testing.T) {
 		})()
 
 		redisClientMock.On("Ping", mock.Anything).Return(errors.New("ping error"))
-		_ = InitRedisClient("localhost", "6379", WithCustomRedisClient(redisClientMock))
+		_ = InitRedisClient("localhost", "6379", nil, WithCustomRedisClient(redisClientMock))
 
 		redisClientMock.AssertExpectations(t)
 	})

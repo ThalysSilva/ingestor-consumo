@@ -51,8 +51,9 @@ func NewPulseProducerService(ingestorURL string, minDelay, maxDelay, qtyTenants,
 	httpClient := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 50,
+			MaxIdleConns:        1000,
+			MaxIdleConnsPerHost: 500,
+			MaxConnsPerHost:     1000,
 			IdleConnTimeout:     30 * time.Second,
 		},
 	}
