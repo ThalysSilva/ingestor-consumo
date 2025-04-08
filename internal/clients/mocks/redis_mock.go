@@ -10,10 +10,9 @@ import (
 type MockRedisClient struct {
 	mock.Mock
 }
-
 func (m *MockRedisClient) IncrByFloat(ctx context.Context, key string, value float64) *redis.FloatCmd {
 	args := m.Called(ctx, key, value)
-	cmd := redis.NewFloatCmd(ctx, args...)
+	cmd := redis.NewFloatCmd(ctx, key, value)
 	if err := args.Error(0); err != nil {
 		cmd.SetErr(err)
 	} else {
@@ -40,7 +39,7 @@ func (m *MockRedisClient) Scan(ctx context.Context, cursor uint64, match string,
 
 func (m *MockRedisClient) Get(ctx context.Context, key string) *redis.StringCmd {
 	args := m.Called(ctx, key)
-	cmd := redis.NewStringCmd(ctx, args...)
+	cmd := redis.NewStringCmd(ctx, key)
 	if val, ok := args.Get(0).(string); ok {
 		cmd.SetVal(val)
 	}
@@ -52,7 +51,7 @@ func (m *MockRedisClient) Get(ctx context.Context, key string) *redis.StringCmd 
 
 func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
 	args := m.Called(ctx, key, value, expiration)
-	cmd := redis.NewStatusCmd(ctx, args...)
+	cmd := redis.NewStatusCmd(ctx, key, value, expiration)
 	if err := args.Error(0); err != nil {
 		cmd.SetErr(err)
 	} else {
@@ -63,7 +62,7 @@ func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}
 
 func (m *MockRedisClient) Del(ctx context.Context, keys ...string) *redis.IntCmd {
 	args := m.Called(ctx, keys)
-	cmd := redis.NewIntCmd(ctx, args...)
+	cmd := redis.NewIntCmd(ctx, keys)
 	if err := args.Error(0); err != nil {
 		cmd.SetErr(err)
 	} else {
@@ -79,7 +78,7 @@ func (m *MockRedisClient) Close() error {
 
 func (m *MockRedisClient) Ping(ctx context.Context) *redis.StatusCmd {
 	args := m.Called(ctx)
-	cmd := redis.NewStatusCmd(ctx, args...)
+	cmd := redis.NewStatusCmd(ctx)
 	if err := args.Error(0); err != nil {
 		cmd.SetErr(err)
 	} else {

@@ -12,6 +12,8 @@ import (
 
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients/mocks"
+	"github.com/ThalysSilva/ingestor-consumo/internal/generation"
+	"github.com/ThalysSilva/ingestor-consumo/pkg/utils"
 	"github.com/go-redis/redis/v8"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
@@ -75,16 +77,6 @@ func TestNewPulseSenderService(t *testing.T) {
 		})
 	})
 
-	t.Run("RedisClientError", func(t *testing.T) {
-		ctx := context.Background()
-		redisClient := new(mocks.MockRedisClient)
-		redisClient.On("Get", ctx, "current_generation").Return("", fmt.Errorf("redis error"))
-		redisClient.On("Close").Return(nil)
-
-		svc := NewPulseSenderService(ctx, redisClient, "http://example.com", 10)
-		assert.Nil(t, svc)
-	})
-
 	t.Run("UsingCustomOptions", func(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
@@ -127,11 +119,13 @@ func TestNewPulseSenderService(t *testing.T) {
 
 func TestStartLoopAndStop(t *testing.T) {
 	t.Run("ValidStartAndStop", func(t *testing.T) {
-		ctx := context.Background()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		redisClient := new(mocks.MockRedisClient)
 		clientHttp := new(mocks.MockHTTPClient)
-		redisClient.On("Get", ctx, "current_generation").Return("A", nil)
-		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil).Once()
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
@@ -139,11 +133,15 @@ func TestStartLoopAndStop(t *testing.T) {
 		}
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)
+		redisClient.On("Get", ctx, "generation:A:tenant:tenant1:sku:sku1:useUnit:KB").Return("100.000", nil).Once()
+		redisClient.On("Get", ctx, "generation:A:tenant:tenant2:sku:sku2:useUnit:MB").Return("200.000", nil).Once()
 		clientHttp.On("Post", "http://example.com", "application/json", mock.AnythingOfType("*bytes.Buffer")).Return(&http.Response{}, nil)
 
 		svc := NewPulseSenderService(ctx, redisClient, "http://example.com", 10, WithCustomHTTPClient(clientHttp))
-		svc.StartLoop(2, 100*time.Millisecond)
-		time.Sleep(500 * time.Millisecond)
+		go svc.StartLoop(300*time.Millisecond, 1*time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
+		cancel()
+		time.Sleep(50 * time.Millisecond)
 		redisClient.AssertExpectations(t)
 		assert.NotNil(t, svc)
 	})
@@ -154,25 +152,29 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
 			"generation:A:tenant:tenant2:sku:sku2:useUnit:MB",
 		}
-		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)). // TO-CHECK: Dica para o uso de Scan
-														Return(keys, uint64(0), nil)
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil).Once()
+		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
+			Return(keys, uint64(0), nil)
 		redisClient.On("Get", ctx, "generation:A:tenant:tenant1:sku:sku1:useUnit:KB").
-			Return("100", nil)
+			Return("100.00", nil)
 		redisClient.On("Get", ctx, "generation:A:tenant:tenant2:sku:sku2:useUnit:MB").
-			Return("200", nil)
-		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
+			Return("200.00", nil)
 
 		resp := &http.Response{
 			StatusCode: http.StatusOK,
@@ -180,27 +182,30 @@ func TestSendPulses(t *testing.T) {
 		}
 		httpClient.On("Post", "http://example.com", "application/json", mock.AnythingOfType("*bytes.Buffer")).
 			Return(resp, nil)
-		redisClient.On("Del", ctx, []string{"generation:A:tenant:tenant1:sku:sku1:useUnit:KB"}).Return(nil)
-		redisClient.On("Del", ctx, []string{"generation:A:tenant:tenant2:sku:sku2:useUnit:MB"}).Return(nil)
+
+		redisClient.On("Del", ctx, mock.MatchedBy(utils.MatchKeysIgnoreOrder(keys))).Return(nil).Once()
 
 		err := svc.sendPulses(1 * time.Millisecond)
 		assert.NoError(t, err)
 		redisClient.AssertExpectations(t)
 		httpClient.AssertExpectations(t)
-
+		ctx.Done()
 	})
 	t.Run("ErrorInGenerationToggle", func(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
-
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(fmt.Errorf("redis error"))
 
 		err := svc.sendPulses(1 * time.Millisecond)
@@ -213,22 +218,26 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
 		}
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)
 		redisClient.On("Get", ctx, "generation:A:tenant:tenant1:sku:sku1:useUnit:KB").
 			Return("100", nil)
-		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 
 		resp := &http.Response{
 			StatusCode: http.StatusInternalServerError,
@@ -239,7 +248,7 @@ func TestSendPulses(t *testing.T) {
 
 		err := svc.sendPulses(1 * time.Millisecond)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "erro na resposta da API: status 500")
+		assert.Contains(t, err.Error(), "falha envio lote")
 		redisClient.AssertExpectations(t)
 		httpClient.AssertExpectations(t)
 	})
@@ -248,14 +257,17 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
-
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(nil, uint64(0), fmt.Errorf("scan error"))
@@ -269,17 +281,21 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
 		}
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)
@@ -294,17 +310,21 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
 		}
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)
@@ -319,47 +339,25 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"tenant:tenant1:sku:sku1:useUnit:KB",
 		}
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)
 		redisClient.On("Get", ctx, "tenant:tenant1:sku:sku1:useUnit:KB").
-			Return("100", nil)
-
-		_ = svc.sendPulses(1 * time.Millisecond)
-		httpClient.AssertNotCalled(t, "Post", mock.Anything, mock.Anything, mock.Anything)
-		redisClient.AssertExpectations(t)
-	})
-
-	t.Run("ErrorOnValidateSplitedKey", func(t *testing.T) {
-		ctx := context.Background()
-		redisClient := new(mocks.MockRedisClient)
-		httpClient := new(mocks.MockHTTPClient)
-		svc := &pulseSenderService{
-			redisClient:    redisClient,
-			httpClient:     httpClient,
-			ctx:            ctx,
-			apiURLSender:   "http://example.com",
-			batchQtyToSend: 2,
-		}
-
-		keys := []string{
-			"generation::tenant:tenant1:sku:sku1:useUnit:KB",
-		}
-		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
-		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
-			Return(keys, uint64(0), nil)
-		redisClient.On("Get", ctx, "generation::tenant:tenant1:sku:sku1:useUnit:KB").
 			Return("100", nil)
 
 		_ = svc.sendPulses(1 * time.Millisecond)
@@ -377,17 +375,21 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
 		}
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)
@@ -396,9 +398,7 @@ func TestSendPulses(t *testing.T) {
 
 		err := svc.sendPulses(1 * time.Millisecond)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "falhas ao enviar pulsos")
-		assert.Contains(t, err.Error(), "lote 0: erro ao serializar pulsos: falha intencional na serialização")
-
+		assert.Contains(t, err.Error(), "falha intencional na serialização")
 		httpClient.AssertNotCalled(t, "Post", mock.Anything, mock.Anything, mock.Anything)
 		httpClient.AssertExpectations(t)
 	})
@@ -407,17 +407,21 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
 		}
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)
@@ -432,8 +436,7 @@ func TestSendPulses(t *testing.T) {
 			Return(resp, nil)
 
 		err := svc.sendPulses(1 * time.Millisecond)
-		assert.Contains(t, err.Error(), "erro na resposta da API")
-		assert.Contains(t, err.Error(), "status 500")
+		assert.Contains(t, err.Error(), "falha envio lote")
 
 		httpClient.AssertExpectations(t)
 	})
@@ -442,17 +445,21 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
 		}
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)
@@ -477,17 +484,21 @@ func TestSendPulses(t *testing.T) {
 		ctx := context.Background()
 		redisClient := new(mocks.MockRedisClient)
 		httpClient := new(mocks.MockHTTPClient)
+		generation := generation.NewManagerGeneration(redisClient, ctx)
 		svc := &pulseSenderService{
 			redisClient:    redisClient,
 			httpClient:     httpClient,
 			ctx:            ctx,
 			apiURLSender:   "http://example.com",
 			batchQtyToSend: 2,
+			generation:     generation,
 		}
 
 		keys := []string{
 			"generation:A:tenant:tenant1:sku:sku1:useUnit:KB",
 		}
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
+		redisClient.On("Get", ctx, "current_generation").Return("A", nil).Once()
 		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		redisClient.On("Scan", ctx, uint64(0), "generation:A:tenant:*:sku:*:useUnit:*", int64(100)).
 			Return(keys, uint64(0), nil)

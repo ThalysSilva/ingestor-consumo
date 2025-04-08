@@ -94,7 +94,6 @@ func TestStartAndStop(t *testing.T) {
 		redisClient := new(mocks.MockRedisClient)
 
 		redisClient.On("Get", ctx, "current_generation").Return("A", nil)
-		redisClient.On("Set", ctx, "current_generation", "B", time.Duration(0)).Return(nil)
 		testPulse := &Pulse{
 			TenantId:   "tenant1",
 			ProductSku: "sku1",

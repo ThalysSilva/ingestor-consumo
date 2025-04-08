@@ -104,7 +104,6 @@ func (s *pulseSenderService) sendPulses(stabilizationDelay time.Duration) error 
 	if _, err := s.generation.ToggleGeneration(); err != nil {
 		return fmt.Errorf("erro ao alternar geração: %v", err)
 	}
-
 	time.Sleep(stabilizationDelay)
 
 	pattern := fmt.Sprintf("generation:%s:tenant:*:sku:*:useUnit:*", currentGen)
@@ -169,14 +168,13 @@ func (s *pulseSenderService) sendPulses(stabilizationDelay time.Duration) error 
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			pulsesData, err := json.Marshal(pulses)
+			pulsesData, err := marshalFunc(pulses)
 			if err != nil {
 				pulsesBatchParsedFailed.Add(float64(len(pulses)))
 				errChan <- err
 				return
 			}
-
-			resp, err := http.Post(s.apiURLSender, "application/json", bytes.NewBuffer(pulsesData))
+			resp, err := s.httpClient.Post(s.apiURLSender, "application/json", bytes.NewBuffer(pulsesData))
 			if err != nil || resp.StatusCode != http.StatusOK {
 				pulsesSentFailed.Add(float64(len(pulses)))
 				errChan <- fmt.Errorf("falha envio lote %d: %v", batchIndex, err)
@@ -184,14 +182,21 @@ func (s *pulseSenderService) sendPulses(stabilizationDelay time.Duration) error 
 			}
 			resp.Body.Close()
 
+			var keysToDelete []string
 			for _, pulse := range pulses {
-				key := fmt.Sprintf("generation:%s:tenant:%s:sku:%s:useUnit:%s", currentGen, pulse.TenantId, pulse.ProductSku, pulse.UseUnit)
-				if err := s.redisClient.Del(s.ctx, key).Err(); err != nil {
-					pulsesNotDeleted.Inc()
-					errChan <- fmt.Errorf("erro ao apagar chave: %s", key)
-					return
-				}
+				key := fmt.Sprintf("generation:%s:tenant:%s:sku:%s:useUnit:%s",
+					currentGen, pulse.TenantId, pulse.ProductSku, pulse.UseUnit)
+				keysToDelete = append(keysToDelete, key)
 			}
+
+			if err := s.redisClient.Del(s.ctx, keysToDelete...).Err(); err != nil {
+				for range pulses {
+					pulsesNotDeleted.Inc()
+				}
+				errChan <- fmt.Errorf("erro ao apagar chaves do lote %d: %v", batchIndex, err)
+				return
+			}
+
 			pulsesSentSuccess.Add(float64(len(pulses)))
 		}(batchIndex, pulses)
 	}
