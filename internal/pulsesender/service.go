@@ -28,6 +28,11 @@ type pulseSenderService struct {
 }
 
 type PulseSenderService interface {
+	// StartLoop inicia o loop de envio de pulsos.
+	//
+	// O interval define o intervalo entre os envios de pulsos.
+	//
+	// O stabilizationDelay define um tempo de espera após alternar a geração
 	StartLoop(interval, stabilizationDelay time.Duration)
 }
 
@@ -42,7 +47,7 @@ func WithCustomHTTPClient(client clients.HTTPClient) ServiceOptions {
 
 var marshalFunc = json.Marshal
 
-func NewPulseSenderService(ctx context.Context, redisClient clients.RedisClient, apiURLSender string, batchQtyToSend int, opts ...ServiceOptions) *pulseSenderService {
+func NewPulseSenderService(ctx context.Context, redisClient clients.RedisClient, apiURLSender string, batchQtyToSend int, opts ...ServiceOptions) PulseSenderService {
 	if batchQtyToSend <= 0 {
 		log.Error().Int("batch_qty", batchQtyToSend).Msg("batchQtyToSend deve ser maior que 0")
 		panic(fmt.Sprintf("batchQtyToSend deve ser maior que 0, recebido: %d", batchQtyToSend))

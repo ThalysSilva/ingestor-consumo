@@ -21,7 +21,7 @@ type PulseService interface {
 
 	// Start inicia o serviço de pulsos, criando os workers para processar os pulsos recebidos.
 	// O parâmetro workers define o número de workers a serem criados.
-	// O parâmetro refreshTimeGeneration define o intervalo de tempo entre as verificações de geração atual.
+	// O parâmetro refreshTimeGeneration define o intervalo de tempo entre as verificações para as atualizações da geração atual.
 	// O método aguarda a finalização de todos os workers antes de retornar.
 	Start(workers int, refreshTimeGeneration time.Duration)
 
