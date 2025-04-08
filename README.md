@@ -9,12 +9,12 @@ Este projeto implementa o Ingestor do sistema de bilhetagem de consumo. O Ingest
 - Armazenar e agregar os pulsos no Redis com gerações alternadas (A e B).
 - Enviar os pulsos agregados a cada hora para o Processador & Armazenador.
 
-O sistema suporta 2000 req/s e foi projetado para ser escalável em produção. O Redis, Prometheus e Grafana são configurados via Docker Compose para persistência, monitoramento e visualização de métricas. Um pulseProducer foi implementado para simular o envio de pulsos ao Ingestor, permitindo testar diferentes níveis de produção.
+O sistema suporta 1000 req/s e foi projetado para ser escalável em produção. O Redis, Prometheus, Grafana e o ingestor são configurados via Docker Compose para persistência, monitoramento e visualização de métricas. Um pulseProducer foi implementado para simular o envio de pulsos ao Ingestor, permitindo testar diferentes níveis de produção.
 
 ## Pré-requisitos
 
 - Go 1.18 ou superior.
-- Docker e Docker Compose (para rodar Redis, Prometheus e Grafana).
+- Docker e Docker Compose (para rodar Redis, Prometheus, Grafana, ingestor e produtor).
 - Um editor de texto para ajustar configurações (ex.: VS Code).
 
 ## Estrutura do Projeto
@@ -76,7 +76,7 @@ INGESTOR_PORT=8080
 INGESTOR_HOST=ingestor
 REDIS_HOST=redis
 REDIS_PORT=6379
-API_URL_SENDER=http://localhost:8080/process
+API_URL_SENDER=http://localhost:8090/process
 ```
 
 - `REDIS_HOST=redis` refere-se ao nome do serviço Redis no Docker Compose.
