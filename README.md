@@ -18,7 +18,7 @@ O sistema suporta 2000 req/s e foi projetado para ser escalável em produção. 
 - Um editor de texto para ajustar configurações (ex.: VS Code).
 
 ## Estrutura do Projeto
-
+- *build:* Pasta contendo arquivos referente a infraestrutura (dockerfile, grafana, prometheus, etc.)
 - **cmd/ingestor/main.go:** Ponto de entrada do Ingestor.
 - **cmd/producer/main.go:** Ponto de entrada do pulseProducer, usado para simular o envio de pulsos.
 - **grafana-provisioning/:** Configurações de provisionamento do Grafana (ex.: datasources, dashboards).
@@ -72,77 +72,35 @@ go mod tidy
 Crie um arquivo **.env** na raiz do projeto com as seguintes variáveis (você pode usar o **example.env** como base):
 
 ```bash
-INGESTOR_PORT=8070
+INGESTOR_PORT=8080
+INGESTOR_HOST=ingestor
 REDIS_HOST=redis
 REDIS_PORT=6379
-API_URL_SENDER=http://localhost:8090/process
+API_URL_SENDER=http://localhost:8080/process
 ```
 
 - `REDIS_HOST=redis` refere-se ao nome do serviço Redis no Docker Compose.
+- `INGESTOR_HOST=ingestor` refere-se ao nome do serviço da api ingestor no Docker Compose.
 - `INGESTOR_PORT=8070` deve corresponder ao targets no prometheus.yml.
-
-Ajuste o arquivo **prometheus.yml** para o seu sistema operacional:
-
-### Windows:
-
-O `host.docker.internal` funciona nativamente:
-
-```yaml
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: "pulse-ingestor"
-    static_configs:
-      - targets: ["host.docker.internal:8070"]
-```
-
-### Linux:
-
-O `host.docker.internal` não é suportado nativamente. Use `localhost` ou o IP da máquina host (ex.: 172.17.0.1 ou o IP da sua máquina). Exemplo:
-
-```yaml
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: "pulse-ingestor"
-    static_configs:
-      - targets: ["localhost:8070"]
-```
-
-_Nota:_ Se você decidir rodar o Ingestor como um serviço no Docker Compose, o target seria `ingestor:8070`, e você precisaria adicionar o Ingestor ao **docker-compose.yml**.
 
 ## Como Executar
 
-Suba os serviços Redis, Prometheus e Grafana usando Docker Compose:
+Suba os serviços do Ingestor, Redis, Prometheus e Grafana usando Docker Compose:
 
 ```bash
 docker-compose up -d
 ```
 
 Isso iniciará:
+_(caso utilize as envs do example.env)_
 
+- Ingestor na porta 8080
 - Redis na porta 6379.
 - Prometheus na porta 9090.
 - Grafana na porta 3000.
 
-Execute o Ingestor localmente:
-
-### Windows:
-```bash
-.\scripts\run_ingestor.ps1
-```
-_Nota:_ É necessário liberar a execução de scripts do windows. Para isso, Abra um powershell em **modo de administrador** e execute: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
-
-### Linux:
-
-```bash
-./scripts/run_ingestor.sh
-```
-
-O Ingestor estará rodando em `http://localhost:8070`.  
-As métricas estarão disponíveis em `http://localhost:8070/metrics`.
+As métricas estarão disponíveis em `http://localhost:8080/metrics`.
+Documentação da api disponível em `http://localhost:8080/swagger/index.html`
 
 Acesse o Prometheus para verificar as métricas:
 
@@ -166,9 +124,9 @@ O pulseProducer (em `cmd/producer/main.go`) simula o envio de pulsos ao Ingestor
 
 Configurações padrão (ajustáveis no código):
 
-- `qtyTenants = 3000`: Número de "origens" de pulsos (goroutines).
-- `minDelay = 500`: Delay mínimo entre envios (em milissegundos).
-- `maxDelay = 1000`: Delay máximo entre envios (em milissegundos).
+- `qtyTenants = 200`: Número de "origens" de pulsos (goroutines).
+- `minDelay = 100`: Delay mínimo entre envios (em milissegundos).
+- `maxDelay = 400`: Delay máximo entre envios (em milissegundos).
 - `timeDuration = 100 * time.Second`: Duração total do teste.
 - `qtySKUs = 10`: Número de SKUs diferentes para simulação.
 
@@ -177,30 +135,30 @@ Para executar o pulseProducer:
 ### Windows:
 
 ```bash
-.\scripts\run_producer.ps1
+.\scripts\run_producer-docker.ps1
 ```
 
 ### Linux:
 
 ```bash
-./scripts/run_producer.sh
+./scripts/run_producer-docker.sh
 ```
 
-O pulseProducer enviará pulsos para `http://localhost:8070/ingest` por 100 segundos e depois encerrará.
+O pulseProducer enviará pulsos para `http://localhost:8080/ingest` por 100 segundos e depois encerrará.
 
 ### Envio Manual (Opcional)
 
 Você também pode enviar pulsos manualmente via curl:
 
 ```bash
-curl -X POST http://localhost:8070/ingest -H "Content-Type: application/json" -d '{"tenant_id":"tenant_xpto","product_sku":"SKU-77","used_amount":307,"use_unity":"KB"}'
+curl -X POST http://localhost:8080/ingest -H "Content-Type: application/json" -d '{"tenant_id":"tenant_xpto","product_sku":"SKU-77","used_amount":307,"use_unity":"KB"}'
 ```
 
 ## Verificação
 
 - Verifique os logs do Ingestor no console e no arquivo `log/log_ingestor.log`.
 - Verifique os logs do pulseProducer no console e no arquivo `log/log_producer.log`.
-- Acesse as métricas em `http://localhost:8070/metrics`.
+- Acesse as métricas em `http://localhost:8080/metrics`.
 - Visualize os dados no Grafana (`http://localhost:3000`).
 
 ## Parando os Serviços
@@ -213,8 +171,8 @@ docker-compose down
 
 ## Decisões Técnicas
 
-- **Canais (Go):** Escolhidos para processamento assíncrono, permitindo alta taxa de ingestão (2000 req/s).
-- **Redis:** Usado para persistência e agregação, com operações atômicas (`HIncrByFloat`).
+- **Canais (Go):** Escolhidos para processamento assíncrono, permitindo alta taxa de ingestão (1000 req/s).
+- **Redis (com replicas e sentinelas):** Usado para persistência e agregação, com operações atômicas (`HIncrByFloat`).
 - **Gerações Alternadas (A e B):** Introduzidas para evitar race conditions entre leitura e deleção.
 - **Prometheus e Grafana:** Para monitoramento e visualização de métricas.
 - **Zerolog:** Para logging detalhado.
@@ -225,7 +183,7 @@ docker-compose down
 Em um ambiente de produção, a arquitetura seria ajustada para maior escalabilidade e modularidade:
 
 - **Load Balancer:** Um load balancer seria adicionado para distribuir requisições entre múltiplas instâncias do Ingestor.
-- **Redis Central:** Um Redis central com coordenação (ex.: lock distribuído) poderia ser usado para simplificar a operação e facilitar a agregação global.
+- **Redis Central:** Um Redis central com coordenação (ex.: lock distribuído ou tempo inicial de alteração de geração) poderia ser usado para simplificar a operação e facilitar a agregação global.
 - **Microserviço de Disparo:** A Etapa 3 (disparo e deleção) seria delegada a um microserviço independente (ex.: PulseSender), permitindo desacoplamento e escalabilidade independente.
 
 ## Diagrama de sequência
@@ -258,9 +216,6 @@ sequenceDiagram
     S->>R: Del(chave)
     R-->>S: Confirma deleção
 ```
-
-
-
 
 ## Diagrama de Fluxo de Dados
 
@@ -366,9 +321,6 @@ stateDiagram-v2
     Deletado --> [*]
 ```
 
-
-
 ## Licença
 
 Este projeto está licenciado sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
-
