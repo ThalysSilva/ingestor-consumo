@@ -6,20 +6,12 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ThalysSilva/ingestor-consumo/internal/clients/mocks"
 	"github.com/stretchr/testify/mock"
 )
 
-type mockHTTPClient struct {
-	mock.Mock
-}
-
-func (m *mockHTTPClient) Post(url, contentType string, body io.Reader) (*http.Response, error) {
-	args := m.Called(url, contentType, body)
-	return args.Get(0).(*http.Response), args.Error(1)
-}
-
 func TestHTTPClient(t *testing.T) {
-	httpClient := new(mockHTTPClient)
+	httpClient := new(mocks.MockHTTPClient)
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(bytes.NewReader([]byte{})),
