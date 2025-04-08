@@ -44,6 +44,7 @@ func main() {
 		"redis-sentinel-2:26379",
 		"redis-sentinel-3:26379",
 	}
+
 	redisClient := clients.InitRedisClient(REDIS_HOST, REDIS_PORT, sentinelAddrs)
 	defer redisClient.Close()
 	ctx, cancel := context.WithCancel(ctx)

@@ -13,14 +13,14 @@ import (
 )
 
 var (
-	INGESTOR_PORT = os.Getenv("INGESTOR_PORT")
+	NGINX_PORT = os.Getenv("NGINX_PORT")
 )
 
 const (
 	minDelay     = 100
 	maxDelay     = 400
 	timeDuration = 100 * time.Second
-	qtyTenants   = 200
+	qtyTenants   = 100
 	qtySKUs      = 10
 )
 
@@ -35,11 +35,11 @@ func init() {
 }
 
 func main() {
-	ingestorHost := os.Getenv("INGESTOR_HOST")
-if ingestorHost == "" {
-    ingestorHost = "localhost"
+	NGINXHost := os.Getenv("NGINX_HOST")
+if NGINXHost == "" {
+	NGINXHost = "localhost"
 }
-ingestorURL := fmt.Sprintf("http://%s:%s/ingest", ingestorHost, INGESTOR_PORT)
+ingestorURL := fmt.Sprintf("http://%s:%s/ingest", NGINXHost, NGINX_PORT)
 	sender := pulseproducer.NewPulseProducerService(ingestorURL, minDelay, maxDelay, qtyTenants, qtySKUs)
 	log.Info().Msgf("Iniciando o Envio de pulsos para %s", ingestorURL)
 

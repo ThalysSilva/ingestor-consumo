@@ -1,25 +1,65 @@
+version: "3.8"
+
 services:
-  ingestor:
-    ulimits:
-      nofile:
-        soft: 100000
-        hard: 100000
+
+  ingestor-1:
     build:
       context: .
       dockerfile: build/Dockerfile
-    container_name: ingestor
-    ports:
-      - "8080:8080"
+    container_name: ingestor-1
+    ports: [] 
     env_file:
       - .env
     depends_on:
       - redis-primary
       - redis-sentinel-1
       - redis-sentinel-2
-      - redis-sentinel-3    
+      - redis-sentinel-3
+    networks:
+      - pulse-ingestor-network
+  ingestor-2:
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+    container_name: ingestor-2
+    ports: []
+    env_file:
+      - .env
+    depends_on:
+      - redis-primary
+      - redis-sentinel-1
+      - redis-sentinel-2
+      - redis-sentinel-3
     networks:
       - pulse-ingestor-network
 
+
+  sender:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.sender
+    container_name: sender
+    env_file:
+      - .env
+    depends_on:
+      - redis-primary
+      - redis-sentinel-1
+      - redis-sentinel-2
+      - redis-sentinel-3
+    networks:
+      - pulse-ingestor-network
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./build/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ingestor-1
+      - ingestor-2
+    networks:
+      - pulse-ingestor-network
   redis-primary:
     image: redis:latest
     container_name: redis-primary
@@ -31,11 +71,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
     networks:
       - pulse-ingestor-network
 
@@ -48,11 +83,6 @@ services:
     depends_on:
       redis-primary:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "4.0"
-          memory: 1024M
     networks:
       - pulse-ingestor-network
 
