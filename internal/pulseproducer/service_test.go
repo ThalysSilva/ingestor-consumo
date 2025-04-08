@@ -22,23 +22,6 @@ type MockHTTPClient struct {
 	mock.Mock
 }
 
-type MockUUID struct {
-	returnValueInString string
-	mock.Mock
-}
-
-type mockUUIDGenerator struct {
-	mockUUID *MockUUID
-}
-
-func (m *mockUUIDGenerator) New() MockUUID {
-	return *m.mockUUID
-}
-
-func (m *MockUUID) String() string {
-	return m.returnValueInString
-}
-
 func (m *MockHTTPClient) Post(url, contentType string, body io.Reader) (*http.Response, error) {
 	args := m.Called(url, contentType, body)
 	return args.Get(0).(*http.Response), args.Error(1)
