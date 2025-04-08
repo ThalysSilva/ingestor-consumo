@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/ThalysSilva/ingestor-consumo/docs"
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
 	"github.com/ThalysSilva/ingestor-consumo/internal/pulse"
 	"github.com/gin-gonic/gin"
@@ -19,7 +20,6 @@ import (
 	"github.com/rs/zerolog/log"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	_ "github.com/ThalysSilva/ingestor-consumo/docs" 
 )
 
 var (
@@ -35,7 +35,7 @@ type httpClientMock struct {
 	err        error
 }
 
-// NewHttpClientMock cria um novo mock de cliente HTTP 
+// NewHttpClientMock cria um novo mock de cliente HTTP
 // com o statusCode, body e err especificados.
 func NewHttpClientMock(statusCode int, body io.Reader, err error) clients.HTTPClient {
 	return &httpClientMock{
@@ -79,7 +79,12 @@ func init() {
 func main() {
 	ctx := context.Background()
 	mockHTTPClient := NewHttpClientMock(200, nil, nil)
-	redisClient := clients.InitRedisClient(REDIS_HOST, REDIS_PORT)
+	sentinelAddrs := []string{
+		"redis-sentinel-1:26379",
+		"redis-sentinel-2:26379",
+		"redis-sentinel-3:26379",
+	}
+	redisClient := clients.InitRedisClient(REDIS_HOST, REDIS_PORT, sentinelAddrs)
 	defer redisClient.Close()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

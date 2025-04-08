@@ -17,10 +17,10 @@ var (
 )
 
 const (
-	minDelay     = 500
-	maxDelay     = 1000
+	minDelay     = 100
+	maxDelay     = 400
 	timeDuration = 100 * time.Second
-	qtyTenants   = 3000
+	qtyTenants   = 200
 	qtySKUs      = 10
 )
 
@@ -35,7 +35,11 @@ func init() {
 }
 
 func main() {
-	ingestorURL := fmt.Sprintf("http://localhost:%s/ingest", INGESTOR_PORT)
+	ingestorHost := os.Getenv("INGESTOR_HOST")
+if ingestorHost == "" {
+    ingestorHost = "localhost"
+}
+ingestorURL := fmt.Sprintf("http://%s:%s/ingest", ingestorHost, INGESTOR_PORT)
 	sender := pulseproducer.NewPulseProducerService(ingestorURL, minDelay, maxDelay, qtyTenants, qtySKUs)
 	log.Info().Msgf("Iniciando o Envio de pulsos para %s", ingestorURL)
 
