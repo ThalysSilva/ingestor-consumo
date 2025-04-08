@@ -54,7 +54,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	pulseService := pulse.NewPulseService(ctx, redisClient)
 	pulseHandler := pulse.NewPulseHandler(pulseService)
-	go pulseService.Start(10, time.Minute)
+	go pulseService.Start(10, 5*time.Second)
 
 	r := gin.Default()
 
