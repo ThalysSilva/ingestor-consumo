@@ -20,31 +20,18 @@ O sistema suporta 1000 req/s e foi projetado para ser escalável em produção. 
 ## Estrutura do Projeto
 - *build:* Pasta contendo arquivos referente a infraestrutura (dockerfile, grafana, prometheus, etc.)
 - **cmd/ingestor/main.go:** Ponto de entrada do Ingestor.
-- **cmd/producer/main.go:** Ponto de entrada do pulseProducer, usado para simular o envio de pulsos.
-- **grafana-provisioning/:** Configurações de provisionamento do Grafana (ex.: datasources, dashboards).
+- **cmd/producer/main.go:** Ponto de entrada do pulseProducer, usado para 
+simular o envio de pulsos.
+- **cmd/sender/main.go:** Ponto de entrada do sender.
 - **internal/clients/:** Utilitários para HTTP, logging e Redis.
-  - _http.go:_ Cliente HTTP para envio de pulsos.
-  - _log.go:_ Configuração do logging com Zerolog.
-  - _redis.go:_ Cliente Redis para persistência e agregação.
-- **internal/pulse/:** Lógica do Ingestor.
-  - _domain.go:_ Definição da estrutura de um pulso.
-  - _handler.go:_ Handler HTTP para o endpoint /ingest.
-  - _service.go:_ Lógica do Ingestor (canal, workers, disparo).
+- **internal/pulse/:** Lógica do Ingestor(consumidor e processador).
 - **internal/pulseproducer/:** Lógica do pulseProducer (simulação de envio de pulsos).
-  - _generator.go:_ Geração de pulsos simulados.
-  - _service.go:_ Lógica do pulseProducer (envio assíncrono de pulsos).
+- **internal/pulsesender/:** Lófica do pulseSender (disparo de envios e deleção)
 - **log/:** Diretório para logs.
-  - _log_ingestor.log:_ Logs do Ingestor.
-  - _log_sender.log:_ Logs do pulseProducer.
-- **scripts/:** Scripts para executar o Ingestor e o pulseProducer.
-  - _run_ingestor.ps1:_ Script PowerShell para executar o Ingestor (Windows).
-  - _run_ingestor.sh:_ Script Bash para executar o Ingestor (Linux).
-  - _run_producer.ps1:_ Script PowerShell para executar o pulseProducer (Windows).
-  - _run_producer.sh:_ Script Bash para executar o pulseProducer (Linux).
+- **scripts/:** Scripts para executar o pulseProducer.
+- **pkg/:** Pacotes para complemento das regras de negócios.
 - **.gitignore:** Arquivo para ignorar arquivos gerados (ex.: logs, binários).
 - **docker-compose.yml:** Configuração dos serviços Redis, Prometheus e Grafana.
-- **prometheus.yml:** Configuração do Prometheus para monitoramento.
-- **Dockerfile:** Dockerfile para o Ingestor (opcional, não utilizado no momento).
 - **.env:** Arquivo de variáveis de ambiente.
 - **example.env:** Exemplo de arquivo .env.
 - **go.mod:** Dependências do Go.
@@ -73,15 +60,20 @@ Crie um arquivo **.env** na raiz do projeto com as seguintes variáveis (você p
 
 ```bash
 INGESTOR_PORT=8080
-INGESTOR_HOST=ingestor
-REDIS_HOST=redis
+NGINX_PORT=80
+PULSE_SENDER_PORT=8081
+NGINX_HOST=nginx
 REDIS_PORT=6379
+REDIS_HOST=redis-primary
 API_URL_SENDER=http://localhost:8090/process
+REDIS_SENTINEL_ADDRS=redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
 ```
 
-- `REDIS_HOST=redis` refere-se ao nome do serviço Redis no Docker Compose.
-- `INGESTOR_HOST=ingestor` refere-se ao nome do serviço da api ingestor no Docker Compose.
-- `INGESTOR_PORT=8070` deve corresponder ao targets no prometheus.yml.
+- `REDIS_HOST` refere-se ao nome do serviço Redis no Docker Compose.
+- `NGINX_HOST` refere-se ao nome do serviço nginx que faz o load balancer para as instancias do ingestor no Docker Compose.
+- `NGINX_PORT` refere-se a porta do serviço nginx.
+- `INGESTOR_PORT` deve corresponder ao targets no prometheus.yml.
+- `API_URL_SENDER` É a api de destino que o pulseSender irá enviar ao coletar os dados do redis.
 
 ## Como Executar
 
@@ -94,12 +86,12 @@ docker-compose up -d
 Isso iniciará:
 _(caso utilize as envs do example.env)_
 
-- Ingestor na porta 8080
+- NGINX na porta 80
 - Redis na porta 6379.
 - Prometheus na porta 9090.
 - Grafana na porta 3000.
 
-As métricas estarão disponíveis em `http://localhost:8080/metrics`.
+Métricas estarão disponíveis em `http://localhost:8080/metrics`.
 Documentação da api disponível em `http://localhost:8080/swagger/index.html`
 
 Acesse o Prometheus para verificar as métricas:
@@ -111,10 +103,9 @@ Acesse o Grafana para visualizar as métricas:
 
 - Abra `http://localhost:3000` no navegador.
 - Faça login com usuário `admin` e senha `admin`.
-- Configure um datasource para o Prometheus (URL: `http://prometheus:9090`).
-- Crie dashboards para visualizar as métricas do Ingestor.
+- Visualize os dashboards disponívels do pulse e pulseSender.
 
-_Nota:_ O cliente Http está mockado para concluir a execução dos ciclos de envio. Caso queira integrar um servidor para receptar, será necessário remover o mock `pulse.WithCustomHTTPClient(mockHTTPClient)` dentro do main.go (`cmd/ingestor/main.go`), além de toda definição deles. Também é necessário alterar a variável de ambiente do `API_URL_SENDER` para o endereço do receptor desejado.
+_Nota:_ O cliente Http está mockado para concluir a execução dos ciclos de envio. Caso queira integrar um servidor para receptar, será necessário remover o mock `pulsesender.WithCustomHTTPClient(mockHTTPClient)` dentro do main.go (`cmd/sender/main.go`), além de toda definição dele para o linter não acusar erro de variavel não utilizada. Também é necessário alterar a variável de ambiente do `API_URL_SENDER` para o endereço do receptor desejado.
 
 ## Como Testar
 
@@ -144,7 +135,7 @@ Para executar o pulseProducer:
 ./scripts/run_producer-docker.sh
 ```
 
-O pulseProducer enviará pulsos para `http://localhost:8080/ingest` por 100 segundos e depois encerrará.
+O pulseProducer enviará pulsos para `http://nginx:80/ingest (http://localhost:8080)` por 100 segundos e depois encerrará.
 
 ### Envio Manual (Opcional)
 
@@ -176,15 +167,9 @@ docker-compose down
 - **Gerações Alternadas (A e B):** Introduzidas para evitar race conditions entre leitura e deleção.
 - **Prometheus e Grafana:** Para monitoramento e visualização de métricas.
 - **Zerolog:** Para logging detalhado.
+- **Ingestor:** Recebe, empilha e processa os pulsos incrementando-os no redis.
 - **PulseProducer:** Implementado para simular o envio de pulsos, permitindo testar o Ingestor com diferentes cargas.
-
-## Considerações para Produção
-
-Em um ambiente de produção, a arquitetura seria ajustada para maior escalabilidade e modularidade:
-
-- **Load Balancer:** Um load balancer seria adicionado para distribuir requisições entre múltiplas instâncias do Ingestor.
-- **Redis Central:** Um Redis central com coordenação (ex.: lock distribuído ou tempo inicial de alteração de geração) poderia ser usado para simplificar a operação e facilitar a agregação global.
-- **Microserviço de Disparo:** A Etapa 3 (disparo e deleção) seria delegada a um microserviço independente (ex.: PulseSender), permitindo desacoplamento e escalabilidade independente.
+- **PulseSender:** Implementado para lidar com a parte de envio e deleção dos pulsos mediante sucesso do envios.
 
 ## Diagrama de sequência
 
@@ -192,19 +177,20 @@ Em um ambiente de produção, a arquitetura seria ajustada para maior escalabili
 sequenceDiagram
     participant C as Client
     participant H as HTTP Handler
-    participant S as PulseService
+    participant I as PulseService (Ingestor)
     participant W as Worker
     participant R as Redis
-    participant P as Processador & Armazenador
+    participant S as PulseSenderService (Sender)
+    participant P as API Destino
 
     C->>H: POST /ingest (Pulso)
-    H->>S: EnqueuePulse(pulse)
-    S->>W: Pulso no canal (pulseChan)
+    H->>I: EnqueuePulse(pulse)
+    I->>W: Pulso no canal (pulseChan)
     W->>R: storePulseInRedis(pulse, generation=A)
     R-->>W: Incrementa used_amount
 
-    note over S: A cada hora (intervalToSend)
-    S->>R: toggleGeneration() (A -> B)
+    note over S: A cada intervalo (ex.: 1h)
+    S->>R: ToggleGeneration() (A -> B)
     R-->>S: Atualiza current_generation
     S->>S: stabilizationDelay
     S->>R: Scan(generation=A)
@@ -224,25 +210,28 @@ O diagrama abaixo ilustra o fluxo de dados (pulsos) pelo sistema:
 ```mermaid
 flowchart TD
     subgraph Entrada
-        A[Client] -->|Pulsos_via_HTTP| B[PulseProducer]
-        B -->|Pulsos_via_HTTP| C[HTTP_Handler]
+        A[Client] -->|Pulsos via HTTP| B[HTTP Handler]
     end
 
     subgraph Ingestor
-        C -->|Enfileira_Pulso| D[PulseService]
-        D -->|Armazena_Geração| E[Redis]
-        D -->|Processa_Pulso| F[Workers]
-        F -->|Incrementa_UsedAmount| E
-        D -->|Agrega_e_Envia_Lote| G[Processador_e_Armazenador]
+        B -->|Enfileira Pulso| C[PulseService]
+        C -->|Pulsos via Canal| D[Workers]
+        D -->|Incrementa Dados| E[Redis]
+    end
+
+    subgraph Sender
+        F[PulseSenderService] -->|Toggle & Scan| E
+        F -->|Envia Lotes| G[API Destino]
     end
 
     subgraph Monitoramento
-        E -->|Metricas_de_Acesso| H[Prometheus]
-        D -->|Metricas| H
-        H -->|Visualizacao| I[Grafana]
+        E -->|Métricas de Acesso| H[Prometheus]
+        C -->|Métricas| H
+        F -->|Métricas| H
+        H -->|Visualização| I[Grafana]
     end
 
-    A --> C
+    A --> B
 ```
 
 ## Diagrama de Classes
@@ -254,28 +243,52 @@ classDiagram
     class PulseService {
         <<interface>>
         +EnqueuePulse(pulse Pulse)
-        +Start(workers int, intervalToSend Duration)
+        +Start(workers int, refreshTimeGeneration Duration)
         +Stop()
     }
 
     class pulseService {
-        -pulseChan chan_Pulse
+        -pulseChan chan Pulse
         -redisClient RedisClient
-        -httpClient HTTPClient
         -ctx Context
         -wg WaitGroup
-        -generation AtomicValue
-        -apiURLSender string
-        -batchQtyToSend int
+        -generationAtomic AtomicValue
+        -generation ManagerGeneration
         +EnqueuePulse(pulse Pulse)
-        +Start(workers int, intervalToSend Duration)
+        +Start(workers int, refreshTimeGeneration Duration)
         +Stop()
         -processPulses()
         -storePulseInRedis(ctx Context, client RedisClient, pulse Pulse) error
+        -refreshCurrentGeneration(timeout Duration)
+    }
+
+    class PulseSenderService {
+        <<interface>>
+        +StartLoop(interval Duration, stabilizationDelay Duration)
+    }
+
+    class pulseSenderService {
+        -ctx Context
+        -redisClient RedisClient
+        -apiURLSender string
+        -batchQtyToSend int
+        -generation ManagerGeneration
+        -httpClient HTTPClient
+        +StartLoop(interval Duration, stabilizationDelay Duration)
         -sendPulses(stabilizationDelay Duration) error
-        -getCurrentGeneration() string_error
-        -toggleGeneration() string_error
-        -startAggregationLoop(interval Duration, stabilizationDelay Duration)
+    }
+
+    class ManagerGeneration {
+        <<interface>>
+        +GetCurrentGeneration() (string, error)
+        +ToggleGeneration() (string, error)
+    }
+
+    class managerGeneration {
+        -redisClient RedisClient
+        -ctx Context
+        +GetCurrentGeneration() (string, error)
+        +ToggleGeneration() (string, error)
     }
 
     class Pulse {
@@ -300,9 +313,15 @@ classDiagram
     }
 
     pulseService ..|> PulseService
+    pulseSenderService ..|> PulseSenderService
+    managerGeneration ..|> ManagerGeneration
     pulseService --> RedisClient
-    pulseService --> HTTPClient
+    pulseService --> ManagerGeneration
+    pulseSenderService --> RedisClient
+    pulseSenderService --> HTTPClient
+    pulseSenderService --> ManagerGeneration
     pulseService --> Pulse
+    pulseSenderService --> Pulse
 
 ```
 
@@ -313,11 +332,12 @@ O diagrama abaixo mostra o ciclo de vida de um pulso no sistema:
 ```mermaid
 stateDiagram-v2
     [*] --> Recebido: POST /ingest
-    Recebido --> Enfileirado: EnqueuePulse
-    Enfileirado --> Armazenado_E_Agregado: processPulses
-    Armazenado_E_Agregado --> Selecionado: sendPulses (a cada hora)
-    Selecionado --> Enviado: HTTP POST
-    Enviado --> Deletado: Del(chave)
+    Recebido --> Enfileirado: EnqueuePulse (PulseService)
+    Enfileirado --> Armazenado: processPulses (Worker)
+    Armazenado --> Agregado: ToggleGeneration (PulseSenderService)
+    Agregado --> Selecionado: Scan (PulseSenderService)
+    Selecionado --> Enviado: HTTP POST (PulseSenderService)
+    Enviado --> Deletado: Del(chave) (PulseSenderService)
     Deletado --> [*]
 ```
 
