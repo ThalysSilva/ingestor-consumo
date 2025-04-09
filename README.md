@@ -364,9 +364,9 @@ O diagrama abaixo mostra o ciclo de vida de um pulso no sistema:
 stateDiagram-v2
     [*] --> Recebido: POST /ingest
     Recebido --> Enfileirado: EnqueuePulse (PulseService)
-    Enfileirado --> Armazenado: processPulses (Worker)
-    Armazenado --> Agregado: ToggleGeneration (PulseSenderService)
-    Agregado --> Selecionado: Scan (PulseSenderService)
+    Enfileirado --> Armazenado_Agregado: processPulses (Worker)
+    Armazenado_Agregado --> Separado: ToggleGeneration (PulseSenderService)
+    Separado --> Selecionado: Scan (PulseSenderService)
     Selecionado --> Enviado: HTTP POST (PulseSenderService)
     Enviado --> Deletado: Del(chave) (PulseSenderService)
     Deletado --> [*]
