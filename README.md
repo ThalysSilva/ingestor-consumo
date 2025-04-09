@@ -174,71 +174,35 @@ docker-compose down
 ## Diagrama de sequência
 
 ```mermaid
-Perfeito! Vou atualizar os diagramas considerando que há um NGINX atuando como load balancer para duas instâncias da sua aplicação e que o Redis tem uma réplica e 3 sentinelas. Vou explicar como isso impacta cada diagrama e ajustá-los adequadamente.
-
-Impactos nos Diagramas
-NGINX como Load Balancer:
-O NGINX será incluído como um participante que distribui as requisições entre duas instâncias do serviço (cada uma com seu HTTP Handler, PulseService e PulseSenderService).
-Isso implica que os diagramas de sequência e fluxo de dados terão um NGINX encaminhando requisições para as instâncias.
-Redis com Réplica e 3 Sentinelas:
-A réplica e os sentinelas são parte da infraestrutura de alta disponibilidade do Redis. Nos diagramas, o "Redis" será representado como um cluster ou entidade única, mas com uma nota ou subseção indicando a réplica e os sentinelas.
-No diagrama de sequência, o Redis será tratado como um único ponto de interação (já que o cliente Redis abstrai a réplica e os sentinelas).
-No diagrama de fluxo de dados, podemos mostrar os sentinelas como parte do monitoramento ou da infraestrutura do Redis.
-Agora, vamos aos diagramas atualizados:
-
-Diagrama de Sequência
-Incluí o NGINX como load balancer e mostrei duas instâncias do serviço. O Redis é tratado como uma entidade única, mas com uma nota sobre a réplica e sentinelas.
-
-mermaid
-
-Recolher
-
-Encapsular
-
-Copiar
 sequenceDiagram
     participant C as Client
-    participant N as NGINX (Load Balancer)
-    participant H1 as HTTP Handler (Instância 1)
-    participant I1 as PulseService (Instância 1)
-    participant W1 as Worker (Instância 1)
-    participant H2 as HTTP Handler (Instância 2)
-    participant I2 as PulseService (Instância 2)
-    participant W2 as Worker (Instância 2)
-    participant R as Redis (com Réplica e 3 Sentinelas)
-    participant S1 as PulseSenderService (Instância 1)
-    participant S2 as PulseSenderService (Instância 2)
+    participant N as NGINX (Proxy)
+    participant H as HTTP Handler (Go)
+    participant I as PulseService (Ingestor)
+    participant W as Worker
+    participant R as Redis
+    participant S as PulseSenderService (Sender)
     participant P as API Destino
 
     C->>N: POST /ingest (Pulso)
-    N-->>H1: Encaminha para Instância 1
-    H1->>I1: EnqueuePulse(pulse)
-    I1->>W1: Pulso no canal (pulseChan)
-    W1->>R: storePulseInRedis(pulse, generation=A)
-    R-->>W1: Incrementa used_amount
+    N->>H: Encaminha POST /ingest
+    H->>I: EnqueuePulse(pulse)
+    I->>W: Pulso no canal (pulseChan)
+    W->>R: storePulseInRedis(pulse, generation=A)
+    R-->>W: Incrementa used_amount
 
-    note over N: NGINX distribui entre instâncias
-    C->>N: POST /ingest (Outro Pulso)
-    N-->>H2: Encaminha para Instância 2
-    H2->>I2: EnqueuePulse(pulse)
-    I2->>W2: Pulso no canal (pulseChan)
-    W2->>R: storePulseInRedis(pulse, generation=A)
-    R-->>W2: Incrementa used_amount
-
-    note over S1,S2: A cada intervalo (ex.: 1h)
-    S1->>R: ToggleGeneration() (A -> B)
-    R-->>S1: Atualiza current_generation
-    S1->>S1: stabilizationDelay
-    S1->>R: Scan(generation=A)
-    R-->>S1: Retorna chaves
-    S1->>R: Get(chave)
-    R-->>S1: Retorna used_amount
-    S1->>P: POST (lote de pulsos)
-    P-->>S1: HTTP 200 OK
-    S1->>R: Del(chave)
-    R-->>S1: Confirma deleção
-
-    note over R: Réplica sincroniza, Sentinelas monitoram
+    note over S: A cada intervalo (ex.: 1h)
+    S->>R: ToggleGeneration() (A -> B)
+    R-->>S: Atualiza current_generation
+    S->>S: stabilizationDelay
+    S->>R: Scan(generation=A)
+    R-->>S: Retorna chaves
+    S->>R: Get(chave)
+    R-->>S: Retorna used_amount
+    S->>P: POST (lote de pulsos)
+    P-->>S: HTTP 200 OK
+    S->>R: Del(chave)
+    R-->>S: Confirma deleção
 ```
 
 ## Diagrama de Fluxo de Dados
