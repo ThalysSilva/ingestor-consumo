@@ -19,6 +19,7 @@ O sistema suporta 1000 req/s e foi projetado para ser escalável em produção. 
 
 ## Estrutura do Projeto
 - **build/:** Pasta contendo arquivos referente a infraestrutura (dockerfile, grafana, prometheus, etc.)
+- **docs/:** Pasta contendo a documentação técnica do projeto.
 - **cmd/ingestor/main.go:** Ponto de entrada do Ingestor.
 - **cmd/producer/main.go:** Ponto de entrada do pulseProducer, usado para 
 simular o envio de pulsos.
@@ -151,6 +152,7 @@ curl -X POST http://localhost:8080/ingest -H "Content-Type: application/json" -d
 - Verifique os logs do Ingestor no console e no container no arquivo `/app/log/log_producer.log`.
 - Verifique os logs do pulseProducer no console e no container no arquivo `/app/log/log_producer.log`.
 - Verifique os logs do pulseSender no console e no container no arquivo `/app/log/log_sender.log`.
+- A documentação técnica do projeto se encontra na pasta **docs/**.
 - Acesse as métricas em `http://localhost:8080/metrics`.
 - Visualize os dados no Grafana (`http://localhost:3000`).
 - Acesse a cobertura de testes utilizando o comando `go tool cover -html=coverage`
@@ -169,7 +171,7 @@ docker-compose down
 - **Redis (com replicas e sentinelas):** Usado para persistência e agregação, com operações atômicas (`HIncrByFloat`).
 - **Gerações Alternadas (A e B):** Introduzidas para evitar race conditions entre leitura e deleção.
 - **Prometheus e Grafana:** Para monitoramento e visualização de métricas.
-- **Zerolog:** Para logging detalhado.
+- **Zerolog e Lumberjack:** Para logging detalhado.
 - **Ingestor:** Recebe, empilha e processa os pulsos incrementando-os no redis.
 - **PulseProducer:** Implementado para simular o envio de pulsos, permitindo testar o Ingestor com diferentes cargas.
 - **PulseSender:** Implementado para lidar com a parte de envio e deleção dos pulsos mediante sucesso do envios.
