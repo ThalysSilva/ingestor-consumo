@@ -212,36 +212,36 @@ O diagrama abaixo ilustra o fluxo de dados (pulsos) pelo sistema:
 ```mermaid
 flowchart TD
     subgraph Entrada
-        A[Client] -->|Pulsos via HTTP| N[NGINX (Load Balancer)]
+        A[Client] -->|Pulsos_via_HTTP| N[NGINX_Load_Balancer]
     end
 
-    subgraph Instância 1
-        N -->|Distribui| B1[HTTP Handler 1]
-        B1 -->|Enfileira Pulso| C1[PulseService 1]
-        C1 -->|Pulsos via Canal| D1[Workers 1]
-        D1 -->|Incrementa Dados| E[Redis]
-        C1 -->|Toggle & Envia| F1[PulseSenderService 1]
-        F1 -->|Envia Lotes| G[API Destino]
+    subgraph Instância_1
+        N -->|Distribui| B1[HTTP_Handler_1]
+        B1 -->|Enfileira_Pulso| C1[PulseService_1]
+        C1 -->|Pulsos_via_Canal| D1[Workers_1]
+        D1 -->|Incrementa_Dados| E[Redis]
+        C1 -->|Toggle_e_Envia| F1[PulseSenderService_1]
+        F1 -->|Envia_Lotes| G[API_Destino]
     end
 
-    subgraph Instância 2
-        N -->|Distribui| B2[HTTP Handler 2]
-        B2 -->|Enfileira Pulso| C2[PulseService 2]
-        C2 -->|Pulsos via Canal| D2[Workers 2]
-        D2 -->|Incrementa Dados| E
-        C2 -->|Toggle & Envia| F2[PulseSenderService 2]
-        F2 -->|Envia Lotes| G
+    subgraph Instância_2
+        N -->|Distribui| B2[HTTP_Handler_2]
+        B2 -->|Enfileira_Pulso| C2[PulseService_2]
+        C2 -->|Pulsos_via_Canal| D2[Workers_2]
+        D2 -->|Incrementa_Dados| E
+        C2 -->|Toggle_e_Envia| F2[PulseSenderService_2]
+        F2 -->|Envia_Lotes| G
     end
 
-    subgraph Redis Infra
-        E[Redis Master] -->|Sincroniza| R[Redis Réplica]
-        E -->|Monitora| S1[Sentinela 1]
-        E -->|Monitora| S2[Sentinela 2]
-        E -->|Monitora| S3[Sentinela 3]
+    subgraph Redis_Infra
+        E[Redis_Master] -->|Sincroniza| R[Redis_Réplica]
+        E -->|Monitora| S1[Sentinela_1]
+        E -->|Monitora| S2[Sentinela_2]
+        E -->|Monitora| S3[Sentinela_3]
     end
 
     subgraph Monitoramento
-        E -->|Métricas de Acesso| H[Prometheus]
+        E -->|Métricas_de_Acesso| H[Prometheus]
         C1 -->|Métricas| H
         F1 -->|Métricas| H
         C2 -->|Métricas| H
