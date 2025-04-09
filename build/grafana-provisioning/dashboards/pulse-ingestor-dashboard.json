@@ -279,7 +279,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(ingestor_redis_access_total{service=\"ingestor\", instance=~\"$instance\"}[5m])",
+          "expr": "rate(ingestor_redis_access_total{service=\"ingestor\", instance=~\"$instance\"}[1m])",
           "legendFormat": "Acessos ao Redis - {{instance}}",
           "refId": "A"
         }
@@ -376,7 +376,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(ingestor_pulses_received_total{service=\"ingestor\", instance=~\"$instance\"}[5m])",
+          "expr": "rate(ingestor_pulses_received_total{service=\"ingestor\", instance=~\"$instance\"}[1m])",
           "legendFormat": "Pulsos Recebidos - {{instance}}",
           "range": true,
           "refId": "A"
@@ -387,7 +387,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(ingestor_pulses_processed_total{service=\"ingestor\", instance=~\"$instance\"}[5m])",
+          "expr": "rate(ingestor_pulses_processed_total{service=\"ingestor\", instance=~\"$instance\"}[1m])",
           "legendFormat": "Pulsos Processados - {{instance}}",
           "range": true,
           "refId": "B"
@@ -505,7 +505,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(ingestor_pulses_processed_total{service=\"ingestor\", instance=~\"$instance\"}[5m])",
+          "expr": "rate(ingestor_pulses_processed_total{service=\"ingestor\", instance=~\"$instance\"}[1m])",
           "legendFormat": "Taxa de Processamento - {{instance}}",
           "refId": "A"
         },
@@ -514,7 +514,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "avg(rate(ingestor_pulse_processing_duration_seconds_sum{service=\"ingestor\", instance=~\"$instance\"}[5m])) / avg(rate(ingestor_pulse_processing_duration_seconds_count{service=\"ingestor\", instance=~\"$instance\"}[5m]))",
+          "expr": "avg(rate(ingestor_pulse_processing_duration_seconds_sum{service=\"ingestor\", instance=~\"$instance\"}[1m])) / avg(rate(ingestor_pulse_processing_duration_seconds_count{service=\"ingestor\", instance=~\"$instance\"}[1m]))",
           "legendFormat": "Duração Média - {{instance}}",
           "refId": "B"
         }
@@ -610,7 +610,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum(rate(ingestor_pulse_processing_duration_seconds_bucket{service=\"ingestor\", instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(ingestor_pulse_processing_duration_seconds_bucket{service=\"ingestor\", instance=~\"$instance\"}[1m])) by (le))",
           "legendFormat": "Percentil 99 - {{instance}}",
           "refId": "A"
         }
@@ -706,7 +706,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(ingestor_pulses_processed_total{service=\"ingestor\", instance=~\"$instance\"}[5m])",
+          "expr": "rate(ingestor_pulses_processed_total{service=\"ingestor\", instance=~\"$instance\"}[1m])",
           "legendFormat": "Pulsos Processados - {{instance}}",
           "refId": "A"
         }
