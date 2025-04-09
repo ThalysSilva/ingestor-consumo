@@ -25,8 +25,6 @@ func TestMain(m *testing.M) {
 	zerolog.SetGlobalLevel(zerolog.Disabled)
 
 	originalMetrics := map[string]interface{}{
-
-		"redisAccessCount":        redisAccessCount,
 		"pulsesBatchParsedFailed": pulsesBatchParsedFailed,
 		"pulsesSentFailed":        pulsesSentFailed,
 		"pulsesSentSuccess":       pulsesSentSuccess,
@@ -34,7 +32,6 @@ func TestMain(m *testing.M) {
 		"aggregationCycleTime":    aggregationCycleTime,
 	}
 
-	redisAccessCount = prometheus.NewCounter(prometheus.CounterOpts{Name: "ingestor_redis_access_total"})
 	pulsesBatchParsedFailed = prometheus.NewCounter(prometheus.CounterOpts{Name: "ingestor_pulses_batch_parse_failed_total"})
 	pulsesSentFailed = prometheus.NewCounter(prometheus.CounterOpts{Name: "ingestor_pulses_sent_failed_total"})
 	pulsesSentSuccess = prometheus.NewCounter(prometheus.CounterOpts{Name: "ingestor_pulses_sent_success_total"})
@@ -46,7 +43,6 @@ func TestMain(m *testing.M) {
 
 	exitCode := m.Run()
 
-	redisAccessCount = originalMetrics["redisAccessCount"].(prometheus.Counter)
 	pulsesBatchParsedFailed = originalMetrics["pulsesBatchParsedFailed"].(prometheus.Counter)
 	pulsesSentFailed = originalMetrics["pulsesSentFailed"].(prometheus.Counter)
 	pulsesSentSuccess = originalMetrics["pulsesSentSuccess"].(prometheus.Counter)

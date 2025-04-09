@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,11 +40,8 @@ func init() {
 
 func main() {
 	ctx := context.Background()
-	sentinelAddrs := []string{
-		"redis-sentinel-1:26379",
-		"redis-sentinel-2:26379",
-		"redis-sentinel-3:26379",
-	}
+	sentinelEnv := os.Getenv("REDIS_SENTINEL_ADDRS")
+	sentinelAddrs := strings.Split(sentinelEnv, ",")
 
 	redisClient := clients.InitRedisClient(REDIS_HOST, REDIS_PORT, sentinelAddrs)
 	defer redisClient.Close()

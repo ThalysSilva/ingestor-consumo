@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/ThalysSilva/ingestor-consumo/internal/clients"
@@ -75,11 +76,8 @@ func (h *httpClientMock) Post(url, contentType string, body io.Reader) (*http.Re
 func main() {
 	ctx := context.Background()
 	mockHTTPClient := NewHttpClientMock(200, nil, nil)
-	sentinelAddrs := []string{
-		"redis-sentinel-1:26379",
-		"redis-sentinel-2:26379",
-		"redis-sentinel-3:26379",
-	}
+	sentinelEnv := os.Getenv("REDIS_SENTINEL_ADDRS")
+	sentinelAddrs := strings.Split(sentinelEnv, ",")
 
 	redisClient := clients.InitRedisClient(REDIS_HOST, REDIS_PORT, sentinelAddrs)
 	defer redisClient.Close()

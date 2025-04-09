@@ -37,6 +37,8 @@ type PulseProducerService interface {
 }
 
 var qtyPulsesSent int64
+var qtyPulsesFailed int64
+var qtyPulsesSuccess int64
 
 // NewPulseProducerService cria um novo serviço de produção de pulsos.
 // O serviço de produção de pulsos é responsável por gerar pulsos aleatórios
@@ -107,14 +109,17 @@ func (s *pulseProducerService) Start() {
 					resp, err := s.httpClient.Post(s.ingestorURL, "application/json", bytes.NewBuffer(jsonData))
 					if err != nil {
 						log.Error().Msgf("Erro ao enviar pulso: %v\n", err)
+						atomic.AddInt64(&qtyPulsesFailed, 1)
 						continue
 					}
 					resp.Body.Close()
 
 					if resp.StatusCode != http.StatusNoContent {
 						log.Error().Msgf("Erro ao enviar pulso. Status: %s\n", resp.Status)
+						atomic.AddInt64(&qtyPulsesFailed, 1)
 					} else {
 						log.Debug().Msgf("Pulso do cliente %s enviado com sucesso! Status: %s\n", tenantId, resp.Status)
+						atomic.AddInt64(&qtyPulsesSuccess, 1)
 					}
 				}
 			}
@@ -125,8 +130,11 @@ func (s *pulseProducerService) Start() {
 func (s *pulseProducerService) Stop() {
 	close(s.quitChan)
 	s.wg.Wait()
-	log.Info().Msgf("Total de pulsos enviados: %d \n", qtyPulsesSent)
+	log.Info().Msgf("Total de pulsos gerados: %d \n", qtyPulsesSent)
+	log.Info().Msgf("Total de pulsos enviados com falha: %d \n", qtyPulsesFailed)
+	log.Info().Msgf("Total de pulsos enviados com sucesso: %d \n", qtyPulsesSuccess)
 }
+
 // generateSkuMap gera um mapa de SKUs aleatórios com unidades de pulso associadas
 func (s *pulseProducerService) generateSkuMap() *map[string]pulse.PulseUnit {
 	skuMap := make(map[string]pulse.PulseUnit)

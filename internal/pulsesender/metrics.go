@@ -6,12 +6,6 @@ import (
 
 var (
 	metricsRegistered = false
-	redisAccessCount  = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "ingestor_redis_access_total",
-			Help: "Número total de acessos ao Redis",
-		},
-	)
 	pulsesBatchParsedFailed = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "ingestor_pulses_batch_parse_failed_total",
