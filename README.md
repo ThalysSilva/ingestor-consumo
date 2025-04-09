@@ -18,7 +18,7 @@ O sistema suporta 1000 req/s e foi projetado para ser escalável em produção. 
 - Um editor de texto para ajustar configurações (ex.: VS Code).
 
 ## Estrutura do Projeto
-- **build:** Pasta contendo arquivos referente a infraestrutura (dockerfile, grafana, prometheus, etc.)
+- **build/:** Pasta contendo arquivos referente a infraestrutura (dockerfile, grafana, prometheus, etc.)
 - **cmd/ingestor/main.go:** Ponto de entrada do Ingestor.
 - **cmd/producer/main.go:** Ponto de entrada do pulseProducer, usado para 
 simular o envio de pulsos.
@@ -128,6 +128,7 @@ Para executar o pulseProducer:
 ```bash
 .\scripts\run_producer-docker.ps1
 ```
+_Nota:_ É necessário liberar a execução de scripts do windows. Para isso, Abra um powershell em **modo de administrador** e execute: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
 
 ### Linux:
 
