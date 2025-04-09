@@ -148,10 +148,12 @@ curl -X POST http://localhost:8080/ingest -H "Content-Type: application/json" -d
 
 ## Verificação
 
-- Verifique os logs do Ingestor no console e no arquivo `log/log_ingestor.log`.
-- Verifique os logs do pulseProducer no console e no arquivo `log/log_producer.log`.
+- Verifique os logs do Ingestor no console e no container no arquivo `/app/log/log_producer.log`.
+- Verifique os logs do pulseProducer no console e no container no arquivo `/app/log/log_producer.log`.
+- Verifique os logs do pulseSender no console e no container no arquivo `/app/log/log_sender.log`.
 - Acesse as métricas em `http://localhost:8080/metrics`.
 - Visualize os dados no Grafana (`http://localhost:3000`).
+- Acesse a cobertura de testes utilizando o comando `go tool cover -html=coverage`
 
 ## Parando os Serviços
 
@@ -354,7 +356,6 @@ classDiagram
     pulseService --> Pulse
     pulseSenderService --> Pulse
 
-    note "NGINX atua como load balancer para 2 instâncias.\nRedis tem 1 réplica e 3 sentinelas."
 ```
 
 ## Diagrama de Estados

@@ -73,6 +73,16 @@ func (h *httpClientMock) Post(url, contentType string, body io.Reader) (*http.Re
 	}, nil
 }
 
+func init() {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		fmt.Println("falha ao obter o caminho do arquivo atual")
+		os.Exit(1)
+	}
+	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(filename)))
+	clients.InitLog("log_sender.log", projectRoot)
+}
+
 func main() {
 	ctx := context.Background()
 	mockHTTPClient := NewHttpClientMock(200, nil, nil)
