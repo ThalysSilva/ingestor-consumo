@@ -176,20 +176,31 @@ docker-compose down
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant N as NGINX (Proxy)
-    participant H as HTTP Handler (Go)
-    participant I as PulseService (Ingestor)
-    participant W as Worker
-    participant R as Redis
-    participant S as PulseSenderService (Sender)
+    participant N as NGINX (Load Balancer)
+    participant H1 as HTTP Handler (Instância 1)
+    participant I1 as PulseService (Instância 1)
+    participant W1 as Worker (Instância 1)
+    participant H2 as HTTP Handler (Instância 2)
+    participant I2 as PulseService (Instância 2)
+    participant W2 as Worker (Instância 2)
+    participant R as Redis (com Réplica e 3 Sentinelas)
+    participant S as PulseSenderService (Única Instância)
     participant P as API Destino
 
     C->>N: POST /ingest (Pulso)
-    N->>H: Encaminha POST /ingest
-    H->>I: EnqueuePulse(pulse)
-    I->>W: Pulso no canal (pulseChan)
-    W->>R: storePulseInRedis(pulse, generation=A)
-    R-->>W: Incrementa used_amount
+    N-->>H1: Encaminha para Instância 1
+    H1->>I1: EnqueuePulse(pulse)
+    I1->>W1: Pulso no canal (pulseChan)
+    W1->>R: storePulseInRedis(pulse, generation=A)
+    R-->>W1: Incrementa used_amount
+
+    note over N: NGINX distribui entre instâncias do Ingestor
+    C->>N: POST /ingest (Outro Pulso)
+    N-->>H2: Encaminha para Instância 2
+    H2->>I2: EnqueuePulse(pulse)
+    I2->>W2: Pulso no canal (pulseChan)
+    W2->>R: storePulseInRedis(pulse, generation=A)
+    R-->>W2: Incrementa used_amount
 
     note over S: A cada intervalo (ex.: 1h)
     S->>R: ToggleGeneration() (A -> B)
@@ -203,6 +214,8 @@ sequenceDiagram
     P-->>S: HTTP 200 OK
     S->>R: Del(chave)
     R-->>S: Confirma deleção
+
+    note over R: Réplica sincroniza, Sentinelas monitoram
 ```
 
 ## Diagrama de Fluxo de Dados
@@ -215,22 +228,23 @@ flowchart TD
         A[Client] -->|Pulsos_via_HTTP| N[NGINX_Load_Balancer]
     end
 
-    subgraph Instância_1
+    subgraph Ingestor_Instância_1
         N -->|Distribui| B1[HTTP_Handler_1]
         B1 -->|Enfileira_Pulso| C1[PulseService_1]
         C1 -->|Pulsos_via_Canal| D1[Workers_1]
         D1 -->|Incrementa_Dados| E[Redis]
-        C1 -->|Toggle_e_Envia| F1[PulseSenderService_1]
-        F1 -->|Envia_Lotes| G[API_Destino]
     end
 
-    subgraph Instância_2
+    subgraph Ingestor_Instância_2
         N -->|Distribui| B2[HTTP_Handler_2]
         B2 -->|Enfileira_Pulso| C2[PulseService_2]
         C2 -->|Pulsos_via_Canal| D2[Workers_2]
         D2 -->|Incrementa_Dados| E
-        C2 -->|Toggle_e_Envia| F2[PulseSenderService_2]
-        F2 -->|Envia_Lotes| G
+    end
+
+    subgraph Sender
+        F[PulseSenderService] -->|Toggle_e_Scan| E
+        F -->|Envia_Lotes| G[API_Destino]
     end
 
     subgraph Redis_Infra
@@ -243,9 +257,8 @@ flowchart TD
     subgraph Monitoramento
         E -->|Métricas_de_Acesso| H[Prometheus]
         C1 -->|Métricas| H
-        F1 -->|Métricas| H
         C2 -->|Métricas| H
-        F2 -->|Métricas| H
+        F -->|Métricas| H
         H -->|Visualização| I[Grafana]
     end
 ```
@@ -256,6 +269,7 @@ O diagrama abaixo mostra a estrutura estática do código, incluindo as principa
 
 ```mermaid
 classDiagram
+    note "NGINX atua como load balancer para 2 instâncias do PulseService.\nApenas 1 instância do PulseSenderService.\nRedis tem 1 réplica e 3 sentinelas."
     class PulseService {
         <<interface>>
         +EnqueuePulse(pulse Pulse)
