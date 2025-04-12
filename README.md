@@ -40,6 +40,7 @@ simular o envio de pulsos.
 
 _Nota:_ A maioria dos arquivos terá seus respectivos testes terminados em _test.go.
 
+
 ## Como Instalar
 
 Clone o repositório:
